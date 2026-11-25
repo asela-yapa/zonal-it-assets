@@ -380,11 +380,24 @@ function filterAssets() {
 }
 
 // 5. QR CODE GENERATION & SCANNER
+
+
 function openQrModal(assetId) {
   const a = allAssets.find(x => x.asset_id === assetId);
   if (!a) return;
+
   document.getElementById('qr-school-name').textContent = a.schools?.school_name || '';
   document.getElementById('qr-asset-info').textContent = `${a.category} | ${a.inventory_no}`;
+
+  let serialEl = document.getElementById('qr-serial-no');
+  if (!serialEl) {
+    serialEl = document.createElement('p');
+    serialEl.id = 'qr-serial-no';
+    serialEl.className = 'text-xs font-semibold text-slate-700 mt-0.5';
+    document.getElementById('qr-asset-info').after(serialEl);
+  }
+  serialEl.textContent = `S/N: ${a.serial_no || 'N/A'}`;
+
   document.getElementById('qr-asset-id').textContent = a.asset_id;
   const qrBox = document.getElementById('qr-code-container');
   qrBox.innerHTML = '';
@@ -395,6 +408,7 @@ function openQrModal(assetId) {
 function printQrSticker() {
   const schoolName = document.getElementById('qr-school-name').textContent;
   const assetInfo = document.getElementById('qr-asset-info').textContent;
+  const serialNo = document.getElementById('qr-serial-no')?.textContent || '';
   const assetId = document.getElementById('qr-asset-id').textContent;
 
   const canvas = document.querySelector('#qr-code-container canvas');
@@ -403,7 +417,7 @@ function printQrSticker() {
 
   if (!qrDataUrl) return alert('QR Code රූපය සකස් වී නොමැත. නැවත උත්සාහ කරන්න.');
 
-  const win = window.open('', '_blank', 'width=420,height=480');
+  const win = window.open('', '_blank', 'width=420,height=500');
   if (!win) return alert('Popup blocker නිසා Print කවුළුව විවෘත නොවීය. කරුණාකර Popups Allow කරන්න.');
 
   win.document.write(`
@@ -416,7 +430,8 @@ function printQrSticker() {
         .sticker { border: 2px solid #1e293b; border-radius: 12px; padding: 16px 20px; text-align: center; width: 240px; }
         .school { font-size: 12px; font-weight: bold; color: #334155; margin: 0 0 10px 0; }
         .qr-img { width: 160px; height: 160px; display: block; margin: 0 auto; }
-        .info { font-size: 13px; font-weight: bold; color: #0f172a; margin: 10px 0 4px 0; }
+        .info { font-size: 13px; font-weight: bold; color: #0f172a; margin: 10px 0 2px 0; }
+        .serial { font-size: 12px; font-weight: bold; color: #1e293b; margin: 2px 0 6px 0; }
         .uuid { font-size: 9px; color: #64748b; word-break: break-all; margin: 0; }
       </style>
     </head>
@@ -425,6 +440,7 @@ function printQrSticker() {
         <p class="school">${schoolName}</p>
         <img class="qr-img" src="${qrDataUrl}" onload="setTimeout(() => { window.focus(); window.print(); }, 150);" />
         <p class="info">${assetInfo}</p>
+        <p class="serial">${serialNo}</p>
         <p class="uuid">${assetId}</p>
       </div>
     </body>
