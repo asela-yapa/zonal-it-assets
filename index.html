@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="si">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zonal IT Asset & Maintenance System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    @media print {
+      body * { visibility: hidden; }
+      #pdf-print-sheet, #pdf-print-sheet * { visibility: visible; }
+      #pdf-print-sheet {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 12mm;
+        box-shadow: none !important;
+        border: none !important;
+      }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans">
+
+  <!-- LOGIN SECTION -->
+  <div id="login-section" class="min-h-screen flex items-center justify-center p-4">
+    <div class="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md border border-slate-200">
+      <div class="text-center mb-6">
+        <h1 class="text-2xl font-bold text-blue-700">Zonal IT Asset System</h1>
+        <p class="text-sm text-slate-500 mt-1">Zonal Digital Education Technical Team</p>
+      </div>
+      <form id="login-form" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium mb-1">Email</label>
+          <input type="email" id="login-email" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="name@example.com">
+        </div>
+        <div>
+          <label class="block text-sm font-medium mb-1">Password</label>
+          <input type="password" id="login-password" required class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="••••••••">
+        </div>
+        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition">Sign In</button>
+        <p id="login-error" class="text-red-600 text-sm text-center hidden"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- MAIN APP SHELL -->
+  <div id="app-section" class="hidden min-h-screen flex flex-col md:flex-row">
+    
+    <!-- SIDEBAR -->
+    <aside class="w-full md:w-64 bg-slate-900 text-white flex flex-col shrink-0">
+      <div class="p-5 border-b border-slate-800">
+        <h2 class="text-lg font-bold text-blue-400">Zonal IT Assets</h2>
+        <p id="user-badge" class="text-xs text-slate-400 mt-1"></p>
+      </div>
+      <nav class="flex-1 p-3 space-y-1 text-sm">
+        <button onclick="showTab('dashboard')" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">📊 Dashboard</button>
+        <button onclick="showTab('assets')" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">💻 Assets & Search</button>
+        <button onclick="showTab('scanner')" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">📷 QR Code Scanner</button>
+        <button onclick="showTab('tickets')" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">🔧 Repair Tickets</button>
+        <button id="nav-events" onclick="showTab('events')" class="nav-btn hidden w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">📅 Repair Events</button>
+        <button onclick="showTab('bulk')" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">📥 Excel Bulk Upload</button>
+        <button id="nav-schools" onclick="showTab('schools')" class="nav-btn hidden w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">🏫 Schools (Admin)</button>
+        <button id="nav-users" onclick="showTab('users')" class="nav-btn hidden w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">👥 Users (Admin)</button>
+        <button onclick="showTab('profile')" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">✍️ Profile & Signature</button>
+      </nav>
+      <div class="p-4 border-t border-slate-800">
+        <button onclick="logout()" class="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg text-sm font-medium">Logout</button>
+      </div>
+    </aside>
+
+    <!-- CONTENT AREA -->
+    <main class="flex-1 p-4 md:p-8 overflow-y-auto">
+      
+      <!-- 1. DASHBOARD TAB -->
+      <section id="tab-dashboard" class="tab-content space-y-6">
+        <div class="flex flex-wrap justify-between items-center gap-2">
+          <h2 class="text-2xl font-bold">Dashboard & Analytics</h2>
+          <button onclick="exportAssetsToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-semibold">📊 Export All Assets (.xlsx)</button>
+        </div>
+
+        <!-- KPI CARDS -->
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div class="bg-white p-5 rounded-xl shadow-sm border"><p class="text-xs text-slate-500">මුළු උපකරණ</p><p id="stat-total" class="text-3xl font-bold text-blue-600 mt-1">0</p></div>
+          <div class="bg-white p-5 rounded-xl shadow-sm border"><p class="text-xs text-slate-500">වැඩ කරන (Working)</p><p id="stat-working" class="text-3xl font-bold text-green-600 mt-1">0</p></div>
+          <div class="bg-white p-5 rounded-xl shadow-sm border"><p class="text-xs text-slate-500">දෝෂ සහිත (Faulty)</p><p id="stat-faulty" class="text-3xl font-bold text-amber-600 mt-1">0</p></div>
+          <div class="bg-white p-5 rounded-xl shadow-sm border"><p class="text-xs text-slate-500">අබලන් (Condemned)</p><p id="stat-condemned" class="text-3xl font-bold text-red-600 mt-1">0</p></div>
+          <div class="bg-white p-5 rounded-xl shadow-sm border"><p class="text-xs text-slate-500">විවෘත Tickets</p><p id="stat-open-tickets" class="text-3xl font-bold text-purple-600 mt-1">0</p></div>
+        </div>
+
+        <!-- CHARTS GRID -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="bg-white p-5 rounded-xl shadow-sm border">
+            <h3 class="font-bold text-sm text-slate-700 mb-3">උපකරණ වර්ගය අනුව ව්‍යාප්තිය (Assets by Category)</h3>
+            <div class="h-64"><canvas id="chart-category"></canvas></div>
+          </div>
+          <div class="bg-white p-5 rounded-xl shadow-sm border">
+            <h3 class="font-bold text-sm text-slate-700 mb-3">උපකරණවල වත්මන් තත්ත්වය (Assets by Status)</h3>
+            <div class="h-64 flex justify-center"><canvas id="chart-status"></canvas></div>
+          </div>
+        </div>
+
+        <!-- SCHOOL-WISE SUMMARY TABLE -->
+        <div class="bg-white p-5 rounded-xl shadow-sm border overflow-x-auto">
+          <h3 class="font-bold text-sm text-slate-700 mb-3">පාසල් අනුව උපකරණ සාරාංශය (School-wise Summary)</h3>
+          <table class="w-full text-sm text-left border-collapse">
+            <thead class="bg-slate-50 border-b">
+              <tr>
+                <th class="p-2">පාසල</th><th class="p-2 text-center">මුළු ගණන</th><th class="p-2 text-center text-green-700">Working</th>
+                <th class="p-2 text-center text-amber-700">Faulty / Repair</th><th class="p-2 text-center text-red-700">Condemned</th>
+              </tr>
+            </thead>
+            <tbody id="dashboard-school-summary" class="divide-y"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 2. ASSETS, SEARCH & DYNAMIC ENTRY TAB -->
+      <section id="tab-assets" class="tab-content hidden space-y-6">
+        <div class="flex flex-wrap justify-between items-center gap-2">
+          <h2 class="text-2xl font-bold">උපකරණ කළමනාකරණය (Assets & Search)</h2>
+          <div class="flex gap-2">
+            <button onclick="exportAssetsToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">📊 Export Excel (.xlsx)</button>
+            <button onclick="document.getElementById('add-asset-box').classList.toggle('hidden')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">+ නව උපකරණයක් ඇතුළත් කරන්න</button>
+          </div>
+        </div>
+
+        <!-- ADD NEW ASSET FORM -->
+        <div id="add-asset-box" class="hidden">
+          <form id="asset-form" class="bg-white p-6 rounded-xl shadow-sm border space-y-5">
+            <h3 class="font-bold text-lg text-blue-700">නව උපකරණයක් ඇතුළත් කිරීම</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm font-medium mb-1">පාසල (School) *</label>
+                <select id="asset-school" required class="w-full px-3 py-2 border rounded-lg"></select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">උපකරණ වර්ගය (Category) *</label>
+                <select id="asset-category" onchange="renderSpecFields()" required class="w-full px-3 py-2 border rounded-lg">
+                  <option value="Desktop">Desktop</option>
+                  <option value="Laptop">Laptop</option>
+                  <option value="All-in-One">All-in-One</option>
+                  <option value="Projector">Projector</option>
+                  <option value="Smart Panel">Smart Panel</option>
+                  <option value="Printer">Printer</option>
+                  <option value="UPS">UPS</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Inventory අංකය *</label>
+                <input type="text" id="asset-inv" required class="w-full px-3 py-2 border rounded-lg" placeholder="INV-2026-001">
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Serial Number</label>
+                <input type="text" id="asset-serial" class="w-full px-3 py-2 border rounded-lg">
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Brand & Model</label>
+                <input type="text" id="asset-brand" class="w-full px-3 py-2 border rounded-lg" placeholder="Dell Optiplex / Epson">
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">ස්ථානය (Location)</label>
+                <input type="text" id="asset-location" class="w-full px-3 py-2 border rounded-lg" placeholder="IT Lab 1">
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">ලැබුණු වර්ෂය</label>
+                <input type="number" id="asset-year" class="w-full px-3 py-2 border rounded-lg" placeholder="2024">
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">ප්‍රතිපාදන (Funding)</label>
+                <input type="text" id="asset-funding" class="w-full px-3 py-2 border rounded-lg" placeholder="Ministry / Provincial / Donation">
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">වත්මන් තත්ත්වය</label>
+                <select id="asset-status" class="w-full px-3 py-2 border rounded-lg">
+                  <option value="Working">Working</option>
+                  <option value="Faulty">Faulty</option>
+                  <option value="Under Repair">Under Repair</option>
+                  <option value="Waiting for Parts">Waiting for Parts</option>
+                  <option value="Condemned">Condemned</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="pt-4 border-t">
+              <h4 class="text-sm font-bold text-blue-700 mb-3">තාක්ෂණික පිරිවිතර (Hardware Specifications)</h4>
+              <div id="dynamic-specs" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+            </div>
+
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-medium">Save Asset</button>
+          </form>
+        </div>
+
+        <!-- SEARCH & FILTER BAR -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border grid grid-cols-1 md:grid-cols-4 gap-3">
+          <select id="filter-school" onchange="filterAssets()" class="px-3 py-2 border rounded-lg text-sm">
+            <option value="">සියලුම පාසල් (All Schools)</option>
+          </select>
+          <select id="filter-category" onchange="filterAssets()" class="px-3 py-2 border rounded-lg text-sm">
+            <option value="">සියලුම වර්ග (All Categories)</option>
+            <option value="Desktop">Desktop</option><option value="Laptop">Laptop</option><option value="All-in-One">All-in-One</option>
+            <option value="Projector">Projector</option><option value="Smart Panel">Smart Panel</option><option value="Printer">Printer</option><option value="UPS">UPS</option>
+          </select>
+          <select id="filter-status" onchange="filterAssets()" class="px-3 py-2 border rounded-lg text-sm">
+            <option value="">සියලුම තත්ත්වයන් (All Status)</option>
+            <option value="Working">Working</option><option value="Faulty">Faulty</option><option value="Under Repair">Under Repair</option>
+            <option value="Waiting for Parts">Waiting for Parts</option><option value="Condemned">Condemned</option>
+          </select>
+          <input type="text" id="filter-search" oninput="filterAssets()" placeholder="Search Inventory, Serial, H81, DDR3..." class="px-3 py-2 border rounded-lg text-sm">
+        </div>
+
+        <!-- ASSETS TABLE -->
+        <div class="bg-white p-5 rounded-xl shadow-sm border overflow-x-auto">
+          <table class="w-full text-sm text-left border-collapse">
+            <thead class="bg-slate-50 border-b">
+              <tr>
+                <th class="p-2">පාසල</th><th class="p-2">වර්ගය</th><th class="p-2">Inventory / Serial</th>
+                <th class="p-2">Specs සාරාංශය</th><th class="p-2">තත්ත්වය</th><th class="p-2">ක්‍රියාමාර්ග (Actions)</th>
+              </tr>
+            </thead>
+            <tbody id="assets-table-body" class="divide-y"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 3. QR CODE SCANNER TAB -->
+      <section id="tab-scanner" class="tab-content hidden space-y-6">
+        <h2 class="text-2xl font-bold">QR Code Scan කිරීම</h2>
+        <div class="bg-white p-6 rounded-xl shadow-sm border max-w-lg space-y-4">
+          <p class="text-sm text-slate-600">උපකරණයේ ඇති QR Code එක කැමරාවට යොමු කරන්න. එවිට එහි සම්පූර්ණ විස්තර සහ අලුත්වැඩියා ඉතිහාසය විවෘත වේ.</p>
+          <div class="flex gap-2">
+            <button onclick="startScanner()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">📷 Start Camera</button>
+            <button onclick="stopScanner()" class="bg-slate-200 hover:bg-slate-300 px-4 py-2 rounded-lg text-sm">Stop Camera</button>
+          </div>
+          <div id="qr-reader" class="w-full rounded-lg overflow-hidden border"></div>
+          <p id="scan-result-msg" class="text-sm font-medium text-blue-700"></p>
+          <div class="pt-3 border-t">
+            <label class="block text-xs text-slate-500 mb-1">හෝ QR Asset ID එක මෙතැනට Paste කර පරීක්ෂා කරන්න:</label>
+            <div class="flex gap-2">
+              <input type="text" id="manual-qr-id" placeholder="Asset UUID..." class="flex-1 px-3 py-1.5 border rounded-lg text-sm">
+              <button onclick="openAssetDetail(document.getElementById('manual-qr-id').value.trim())" class="bg-slate-800 text-white px-4 py-1.5 rounded-lg text-sm">Search</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. REPAIR TICKETS TAB -->
+      <section id="tab-tickets" class="tab-content hidden space-y-6">
+        <div class="flex flex-wrap justify-between items-center gap-3">
+          <h2 class="text-2xl font-bold">අලුත්වැඩියා ඉල්ලීම් (Repair Tickets)</h2>
+          <div class="flex gap-2">
+            <select id="ticket-filter-status" onchange="loadTickets()" class="px-3 py-2 border rounded-lg bg-white text-sm">
+              <option value="">සියලුම Tickets</option>
+              <option value="Pending">Pending (නව ඉල්ලීම්)</option>
+              <option value="Assigned">Assigned (යොමු කළ)</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Waiting for Parts">Waiting for Parts</option>
+              <option value="Completed">Completed</option>
+              <option value="Unrepairable">Unrepairable</option>
+            </select>
+            <button onclick="exportTicketsToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">📊 Export Tickets (.xlsx)</button>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-xl shadow-sm border overflow-x-auto">
+          <table class="w-full text-sm text-left border-collapse">
+            <thead class="bg-slate-50 border-b">
+              <tr>
+                <th class="p-2">Report No</th><th class="p-2">පාසල සහ උපකරණය</th><th class="p-2">දෝෂය (Fault)</th>
+                <th class="p-2">භාරදුන් සාමාජිකයා / Event</th><th class="p-2">තත්ත්වය</th><th class="p-2">ක්‍රියාමාර්ග</th>
+              </tr>
+            </thead>
+            <tbody id="tickets-table-body" class="divide-y"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 5. REPAIR EVENTS MANAGEMENT TAB (ADMIN & TECH TEAM) -->
+      <section id="tab-events" class="tab-content hidden space-y-6">
+        <div class="flex flex-wrap justify-between items-center gap-2">
+          <h2 class="text-2xl font-bold">අලුත්වැඩියා වැඩසටහන් (Repair Events / Camps)</h2>
+          <button id="btn-toggle-event-form" onclick="document.getElementById('create-event-box').classList.toggle('hidden')" class="hidden bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">+ නව වැඩසටහනක් සංවිධානය කරන්න</button>
+        </div>
+
+        <!-- CREATE EVENT FORM (ADMIN ONLY) -->
+        <div id="create-event-box" class="hidden">
+          <form id="event-form" class="bg-white p-6 rounded-xl shadow-sm border space-y-4">
+            <h3 class="font-bold text-lg text-blue-700">නව අලුත්වැඩියා වැඩසටහනක් (Repair Event)</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div>
+                <label class="block font-medium mb-1">වැඩසටහනේ නම *</label>
+                <input type="text" id="ev-name" required class="w-full px-3 py-2 border rounded-lg" placeholder="උදා: කලාපීය පරිගණක අලුත්වැඩියා කඳවුර - 01">
+              </div>
+              <div>
+                <label class="block font-medium mb-1">පැවැත්වෙන දිනය *</label>
+                <input type="date" id="ev-date" required class="w-full px-3 py-2 border rounded-lg">
+              </div>
+              <div>
+                <label class="block font-medium mb-1">ස්ථාන වර්ගය (Venue Type) *</label>
+                <select id="ev-venue-type" class="w-full px-3 py-2 border rounded-lg">
+                  <option value="School">පාසලක් (School)</option>
+                  <option value="ITDLH Center">ITDLH මධ්‍යස්ථානය (ITDLH Center)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-medium mb-1">ස්ථානයේ නම (Venue Name) *</label>
+                <input type="text" id="ev-venue-name" required class="w-full px-3 py-2 border rounded-lg" placeholder="උදා: ITDLH - ශ්‍රී සුමංගල ම.ම.වි. වාරියපොල">
+              </div>
+              <div>
+                <label class="block font-medium mb-1">සත්කාරක පාසල (අදාළ නම්)</label>
+                <select id="ev-host-school" class="w-full px-3 py-2 border rounded-lg">
+                  <option value="">-- තෝරන්න (Optional) --</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-medium mb-1">තත්ත්වය (Status)</label>
+                <select id="ev-status" class="w-full px-3 py-2 border rounded-lg">
+                  <option value="Scheduled">Scheduled (සැලසුම් කළ)</option>
+                  <option value="Ongoing">Ongoing (පැවැත්වෙමින් පවතී)</option>
+                  <option value="Completed">Completed (අවසන්)</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">විස්තරය (Description)</label>
+              <input type="text" id="ev-desc" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="සහභාගී වන පාසල් හෝ විශේෂ සටහන්...">
+            </div>
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium">Create Repair Event</button>
+          </form>
+        </div>
+
+        <!-- EVENTS LIST -->
+        <div class="bg-white p-5 rounded-xl shadow-sm border overflow-x-auto">
+          <table class="w-full text-sm text-left border-collapse">
+            <thead class="bg-slate-50 border-b">
+              <tr>
+                <th class="p-2">දිනය</th><th class="p-2">වැඩසටහනේ නම</th><th class="p-2">ස්ථානය (Venue)</th>
+                <th class="p-2">තත්ත්වය</th><th class="p-2">ක්‍රියාමාර්ග</th>
+              </tr>
+            </thead>
+            <tbody id="events-table-body" class="divide-y"></tbody>
+          </table>
+        </div>
+
+        <!-- SELECTED EVENT WORKSPACE -->
+        <div id="event-workspace" class="hidden bg-white p-6 rounded-xl shadow-md border-2 border-blue-200 space-y-6">
+          <div class="flex flex-wrap justify-between items-start gap-4 border-b pb-4">
+            <div>
+              <span class="text-xs font-bold uppercase tracking-wider text-blue-600">Event Workspace</span>
+              <h3 id="ws-event-title" class="text-xl font-bold text-slate-800"></h3>
+              <p id="ws-event-meta" class="text-sm text-slate-500"></p>
+            </div>
+            <div class="flex gap-2">
+              <button onclick="exportEventReportToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium">📊 Event Excel Report</button>
+              <button onclick="document.getElementById('event-workspace').classList.add('hidden')" class="text-sm bg-slate-200 px-3 py-1.5 rounded-lg">Close Workspace</button>
+            </div>
+          </div>
+
+          <!-- PARTICIPATING MEMBERS & ATTENDANCE -->
+          <div class="bg-slate-50 p-4 rounded-xl border space-y-3">
+            <h4 class="font-bold text-sm text-slate-800">👥 සහභාගී වන Technical Team සාමාජිකයින් (පැමිණීම ලකුණු කළ අයගේ අත්සන් PDF වාර්තාවට එක්වේ)</h4>
+            <div id="ws-assign-bar" class="hidden flex flex-wrap gap-2">
+              <select id="ws-member-select" class="px-3 py-1.5 border rounded-lg text-sm bg-white"></select>
+              <button onclick="assignMemberToEvent()" class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium">+ Assign Member</button>
+            </div>
+            <div id="ws-participants-list" class="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm"></div>
+          </div>
+
+          <!-- LOG A REPAIR IN THIS EVENT -->
+          <div class="border rounded-xl p-4 space-y-4">
+            <h4 class="font-bold text-base text-blue-700">🛠️ මෙම වැඩසටහනේදී අලුත්වැඩියා කළ උපකරණයක් ඇතුළත් කිරීම</h4>
+            <form id="event-repair-form" class="space-y-3 text-sm">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label class="block font-medium mb-1">1. උපකරණය අයත් පාසල තෝරන්න *</label>
+                  <select id="ev-rep-school" onchange="loadSchoolAssetsForEvent()" class="w-full px-3 py-2 border rounded-lg"></select>
+                </div>
+                <div>
+                  <label class="block font-medium mb-1">2. උපකරණය තෝරන්න (Inventory / Serial) *</label>
+                  <select id="ev-rep-asset" required class="w-full px-3 py-2 border rounded-lg"></select>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label class="block font-medium mb-1">වාර්තා වූ දෝෂය (Fault Description) *</label>
+                  <input type="text" id="ev-rep-fault" required class="w-full px-3 py-2 border rounded-lg" placeholder="උදා: OS දෝෂය / RAM අක්‍රීය වීම">
+                </div>
+                <div>
+                  <label class="block font-medium mb-1">හඳුනාගත් දෝෂය (Diagnosis)</label>
+                  <input type="text" id="ev-rep-diag" class="w-full px-3 py-2 border rounded-lg">
+                </div>
+                <div>
+                  <label class="block font-medium mb-1">සිදුකළ අලුත්වැඩියාව (Action Taken) *</label>
+                  <input type="text" id="ev-rep-action" required class="w-full px-3 py-2 border rounded-lg">
+                </div>
+                <div>
+                  <label class="block font-medium mb-1">මාරු කළ කොටස් (Parts Replaced)</label>
+                  <input type="text" id="ev-rep-parts" class="w-full px-3 py-2 border rounded-lg" placeholder="නැත / 4GB DDR3 RAM...">
+                </div>
+                <div>
+                  <label class="block font-medium mb-1">අලුත්වැඩියා තත්ත්වය</label>
+                  <select id="ev-rep-status" class="w-full px-3 py-2 border rounded-lg">
+                    <option value="Completed">Completed</option>
+                    <option value="Waiting for Parts">Waiting for Parts</option>
+                    <option value="Unrepairable">Unrepairable (Condemned)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block font-medium mb-1">අවසන් තත්ත්වය (Final Condition)</label>
+                  <select id="ev-rep-condition" class="w-full px-3 py-2 border rounded-lg">
+                    <option value="සම්පූර්ණයෙන් යථා තත්ත්වයට පත් කරන ලදී">යථා තත්ත්වයට පත් කරන ලදී</option>
+                    <option value="අමතර කොටස් අවශ්‍යයි">අමතර කොටස් අවශ්‍යයි</option>
+                    <option value="අලුත්වැඩියා කළ නොහැක (Condemned)">අලුත්වැඩියා කළ නොහැක</option>
+                  </select>
+                </div>
+              </div>
+              <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg font-medium">Save Event Repair Log</button>
+            </form>
+          </div>
+
+          <!-- REPAIRS COMPLETED IN THIS EVENT -->
+          <div>
+            <h4 class="font-bold text-sm mb-2">📋 මෙම වැඩසටහනේදී අලුත්වැඩියා කළ උපකරණ ලැයිස්තුව</h4>
+            <div class="overflow-x-auto border rounded-lg">
+              <table class="w-full text-xs text-left">
+                <thead class="bg-slate-100 border-b">
+                  <tr>
+                    <th class="p-2">Report No</th><th class="p-2">පාසල</th><th class="p-2">උපකරණය</th>
+                    <th class="p-2">දෝෂය සහ පිළියම</th><th class="p-2">තත්ත්වය</th><th class="p-2">PDF තත්ව වාර්තාව</th>
+                  </tr>
+                </thead>
+                <tbody id="ws-event-logs-body" class="divide-y"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. BULK DATA UPLOAD TAB -->
+      <section id="tab-bulk" class="tab-content hidden space-y-6">
+        <h2 class="text-2xl font-bold">Excel / CSV තොග දත්ත ඇතුළත් කිරීම (Bulk Upload)</h2>
+        <div class="bg-white p-6 rounded-xl shadow-sm border space-y-4">
+          <div class="flex flex-wrap gap-4 items-center justify-between">
+            <div>
+              <p class="text-sm text-slate-600">1. පළමුව සම්මත Excel ආකෘතිය Download කර දත්ත පුරවන්න.</p>
+              <p class="text-sm text-slate-600">2. පාසල තෝරා සම්පූර්ණ කළ Excel/CSV ගොනුව Upload කරන්න.</p>
+            </div>
+            <button onclick="downloadExcelTemplate()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">⬇️ Download Excel Template (.xlsx)</button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t">
+            <div>
+              <label class="block text-sm font-medium mb-1">අදාළ පාසල තෝරන්න *</label>
+              <select id="bulk-school" class="w-full px-3 py-2 border rounded-lg"></select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium mb-1">Excel (.xlsx) හෝ CSV ගොනුව තෝරන්න *</label>
+              <input type="file" id="bulk-file" accept=".xlsx,.xls,.csv" onchange="handleBulkFile(event)" class="w-full px-3 py-1.5 border rounded-lg bg-slate-50">
+            </div>
+          </div>
+          <div id="bulk-preview-container" class="hidden space-y-3 pt-4">
+            <div class="flex items-center justify-between">
+              <p id="bulk-status-msg" class="text-sm font-semibold"></p>
+              <button id="btn-bulk-confirm" onclick="confirmBulkUpload()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium">✅ Database එකට ඇතුළත් කරන්න</button>
+            </div>
+            <div class="max-h-64 overflow-y-auto border rounded-lg">
+              <table class="w-full text-xs text-left">
+                <thead class="bg-slate-100 sticky top-0">
+                  <tr><th class="p-2">Category</th><th class="p-2">Inventory No</th><th class="p-2">Serial No</th><th class="p-2">Brand/Model</th><th class="p-2">Specs</th><th class="p-2">Validation</th></tr>
+                </thead>
+                <tbody id="bulk-preview-body" class="divide-y"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7. SCHOOLS MANAGEMENT TAB (ADMIN ONLY) -->
+      <section id="tab-schools" class="tab-content hidden space-y-6">
+        <h2 class="text-2xl font-bold">පාසල් කළමනාකරණය (Admin)</h2>
+        <form id="school-form" class="bg-white p-6 rounded-xl shadow-sm border grid grid-cols-1 md:grid-cols-3 gap-4">
+          <input type="text" id="sch-census" required placeholder="සංගණන අංකය (Census No) *" class="px-3 py-2 border rounded-lg">
+          <input type="text" id="sch-name" required placeholder="පාසලේ නම *" class="px-3 py-2 border rounded-lg">
+          <input type="text" id="sch-division" required placeholder="අධ්‍යාපන කොට්ඨාසය *" class="px-3 py-2 border rounded-lg">
+          <select id="sch-type" class="px-3 py-2 border rounded-lg">
+            <option value="1AB">1AB</option><option value="1C">1C</option><option value="Type 2">Type 2</option><option value="Type 3">Type 3</option>
+          </select>
+          <input type="text" id="sch-phone" placeholder="දුරකථන අංකය" class="px-3 py-2 border rounded-lg">
+          <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium py-2">Add School</button>
+        </form>
+        <div class="bg-white p-6 rounded-xl shadow-sm border overflow-x-auto">
+          <table class="w-full text-sm text-left">
+            <thead class="bg-slate-50 border-b"><tr><th class="p-2">Census No</th><th class="p-2">පාසලේ නම</th><th class="p-2">කොට්ඨාසය</th><th class="p-2">වර්ගය</th></tr></thead>
+            <tbody id="schools-table-body" class="divide-y"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 8. USERS MANAGEMENT TAB (ADMIN ONLY) -->
+      <section id="tab-users" class="tab-content hidden space-y-6">
+        <h2 class="text-2xl font-bold">පරිශීලක ගිණුම් කළමනාකරණය (Admin)</h2>
+        <form id="user-create-form" class="bg-white p-6 rounded-xl shadow-sm border space-y-4">
+          <h3 class="font-bold text-blue-700">නව සාමාජිකයෙකු / IT ගුරුවරයෙකු එක් කිරීම</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <input type="text" id="usr-name" required placeholder="සම්පූර්ණ නම *" class="px-3 py-2 border rounded-lg text-sm">
+            <input type="email" id="usr-email" required placeholder="Email *" class="px-3 py-2 border rounded-lg text-sm">
+            <input type="password" id="usr-password" required placeholder="Password (අවම අකුරු 6) *" class="px-3 py-2 border rounded-lg text-sm">
+            <select id="usr-role" class="px-3 py-2 border rounded-lg text-sm">
+              <option value="Tech_Team">Technical Team Member</option>
+              <option value="School_IT">School IT Teacher</option>
+              <option value="Admin">System Admin</option>
+            </select>
+            <select id="usr-school" class="px-3 py-2 border rounded-lg text-sm">
+              <option value="">-- පාසල (School IT සඳහා පමණි) --</option>
+            </select>
+            <input type="text" id="usr-workplace" placeholder="සේවා ස්ථානය (Workplace)" class="px-3 py-2 border rounded-lg text-sm">
+          </div>
+          <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium">Create User Account</button>
+        </form>
+
+        <div class="bg-white p-6 rounded-xl shadow-sm border overflow-x-auto">
+          <table class="w-full text-sm text-left">
+            <thead class="bg-slate-50 border-b"><tr><th class="p-2">නම</th><th class="p-2">Email</th><th class="p-2">Role</th><th class="p-2">පාසල / සේවා ස්ථානය</th></tr></thead>
+            <tbody id="users-table-body" class="divide-y"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 9. USER PROFILE & DIGITAL SIGNATURE TAB -->
+      <section id="tab-profile" class="tab-content hidden space-y-6">
+        <h2 class="text-2xl font-bold">මගේ තොරතුරු සහ ඩිජිටල් අත්සන (Profile & Signature)</h2>
+        <div class="bg-white p-6 rounded-xl shadow-sm border max-w-xl space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">සම්පූර්ණ නම</label>
+            <input type="text" id="prof-name" class="w-full px-3 py-2 border rounded-lg">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">සේවා ස්ථානය (Workplace - PDF වාර්තාවේ දිස්වේ)</label>
+            <input type="text" id="prof-workplace" class="w-full px-3 py-2 border rounded-lg" placeholder="උදා: ITDLH Wariyapola / Zonal Education Office">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">ඩිජිටල් අත්සන (පහත කොටුවේ අඳින්න)</label>
+            <canvas id="sig-canvas" width="400" height="150" class="border-2 border-dashed border-slate-300 rounded-lg bg-slate-50 touch-none cursor-crosshair w-full"></canvas>
+            <div class="flex gap-2 mt-2">
+              <button type="button" onclick="clearSignature()" class="text-xs bg-slate-200 px-3 py-1.5 rounded">Clear</button>
+              <button type="button" onclick="saveProfile()" class="text-sm bg-blue-600 text-white px-4 py-1.5 rounded-lg font-medium">Save Profile & Signature</button>
+            </div>
+          </div>
+          <div id="saved-sig-preview" class="hidden pt-2">
+            <p class="text-xs text-slate-500 mb-1">දැනට සුරැකි අත්සන:</p>
+            <img id="saved-sig-img" class="h-16 border rounded p-1 bg-white" />
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODAL 1: QR CODE STICKER MODAL -->
+  <div id="qr-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl p-6 max-w-sm w-full text-center space-y-4 shadow-xl">
+      <h3 class="font-bold text-lg text-slate-800">Asset QR Sticker</h3>
+      <div id="qr-print-area" class="border-2 border-slate-800 rounded-xl p-4 inline-block bg-white">
+        <p id="qr-school-name" class="text-xs font-bold text-slate-700 mb-2"></p>
+        <div id="qr-code-container" class="flex justify-center"></div>
+        <p id="qr-asset-info" class="text-xs font-semibold mt-2"></p>
+        <p id="qr-asset-id" class="text-[10px] text-slate-400 mt-0.5"></p>
+      </div>
+      <div class="flex justify-center gap-3 pt-2">
+        <button onclick="printQrSticker()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium">🖨️ Print Sticker</button>
+        <button onclick="document.getElementById('qr-modal').classList.add('hidden')" class="bg-slate-200 px-4 py-2 rounded-lg text-sm">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: ASSET DETAILS & MAINTENANCE HISTORY -->
+  <div id="asset-detail-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto space-y-4 shadow-xl">
+      <div class="flex justify-between items-start border-b pb-3">
+        <div id="detail-asset-header"></div>
+        <button onclick="document.getElementById('asset-detail-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
+      </div>
+      <div id="detail-asset-specs" class="bg-slate-50 p-4 rounded-xl text-sm"></div>
+      <div class="flex justify-between items-center">
+        <h4 class="font-bold text-slate-800">අලුත්වැඩියා ඉතිහාසය (Maintenance History)</h4>
+        <button id="btn-detail-report-fault" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium">🔧 Report Fault</button>
+      </div>
+      <div id="detail-asset-history" class="space-y-2 text-sm"></div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: REPORT FAULT (NEW TICKET) -->
+  <div id="fault-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl p-6 max-w-md w-full space-y-4 shadow-xl">
+      <h3 class="font-bold text-lg text-amber-700">🔧 දෝෂයක් වාර්තා කිරීම (Report Fault)</h3>
+      <p id="fault-asset-label" class="text-xs text-slate-600 bg-slate-100 p-2 rounded"></p>
+      <form id="fault-form" class="space-y-3">
+        <input type="hidden" id="fault-asset-id">
+        <div>
+          <label class="block text-sm font-medium mb-1">දෝෂයේ විස්තරය (Fault Description) *</label>
+          <textarea id="fault-description" required rows="3" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="උදා: පරිගණකය On වන්නේ නැත / Display නොපෙන්වයි..."></textarea>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button type="button" onclick="document.getElementById('fault-modal').classList.add('hidden')" class="bg-slate-200 px-4 py-2 rounded-lg text-sm">Cancel</button>
+          <button type="submit" class="bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium">Submit Ticket</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 4: TECH TEAM REPAIR UPDATE MODAL -->
+  <div id="repair-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto space-y-4 shadow-xl">
+      <h3 class="font-bold text-lg text-blue-700">🛠️ අලුත්වැඩියා විස්තර යාවත්කාලීන කිරීම</h3>
+      <p id="rep-header-info" class="text-xs bg-slate-100 p-2.5 rounded text-slate-700"></p>
+      <form id="repair-form" class="space-y-3 text-sm">
+        <input type="hidden" id="rep-log-id">
+        <input type="hidden" id="rep-asset-id">
+        <div>
+          <label class="block font-medium mb-1">හඳුනාගත් දෝෂය (Diagnosis)</label>
+          <input type="text" id="rep-diagnosis" class="w-full px-3 py-2 border rounded-lg" placeholder="උදා: RAM Slot දූවිලි බැඳීම / Power Supply අක්‍රීය වීම">
+        </div>
+        <div>
+          <label class="block font-medium mb-1">සිදුකළ අලුත්වැඩියාව (Action Taken) *</label>
+          <textarea id="rep-action" required rows="2" class="w-full px-3 py-2 border rounded-lg" placeholder="සිදුකළ පිළියම් සඳහන් කරන්න..."></textarea>
+        </div>
+        <div>
+          <label class="block font-medium mb-1">මාරු කළ කොටස් (Parts Replaced)</label>
+          <input type="text" id="rep-parts" class="w-full px-3 py-2 border rounded-lg" placeholder="උදා: 4GB DDR3 RAM / නැත">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-medium mb-1">අලුත්වැඩියා තත්ත්වය</label>
+            <select id="rep-status" class="w-full px-3 py-2 border rounded-lg">
+              <option value="In Progress">In Progress</option>
+              <option value="Waiting for Parts">Waiting for Parts</option>
+              <option value="Completed">Completed</option>
+              <option value="Unrepairable">Unrepairable (Condemned)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-medium mb-1">අවසන් තත්ත්වය (Final Condition)</label>
+            <select id="rep-condition" class="w-full px-3 py-2 border rounded-lg">
+              <option value="සම්පූර්ණයෙන් යථා තත්ත්වයට පත් කරන ලදී">යථා තත්ත්වයට පත් කරන ලදී</option>
+              <option value="අමතර කොටස් අවශ්‍යයි">අමතර කොටස් අවශ්‍යයි</option>
+              <option value="අලුත්වැඩියා කළ නොහැක (Condemned)">අලුත්වැඩියා කළ නොහැක</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block font-medium mb-1">විශේෂ සටහන් (Remarks)</label>
+          <input type="text" id="rep-remarks" class="w-full px-3 py-2 border rounded-lg">
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="document.getElementById('repair-modal').classList.add('hidden')" class="bg-slate-200 px-4 py-2 rounded-lg">Cancel</button>
+          <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded-lg font-medium">Save Repair Details</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 5: OFFICIAL A4 PDF STATUS REPORT PREVIEW & PRINT -->
+  <div id="pdf-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
+    <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[95vh] overflow-y-auto shadow-2xl">
+      <div class="no-print flex justify-between items-center p-4 bg-slate-800 text-white rounded-t-2xl sticky top-0">
+        <span class="font-bold text-sm">📄 නිල පරිගණක තත්ව වාර්තාව (A4 Print / Save as PDF)</span>
+        <div class="flex gap-2">
+          <button onclick="window.print()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm font-semibold">🖨️ Print / Save PDF</button>
+          <button onclick="document.getElementById('pdf-modal').classList.add('hidden')" class="bg-slate-600 hover:bg-slate-700 px-3 py-1.5 rounded-lg text-sm">Close</button>
+        </div>
+      </div>
+      <!-- A4 PRINT SHEET -->
+      <div id="pdf-print-sheet" class="p-8 bg-white text-slate-900 space-y-5 text-sm"></div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
