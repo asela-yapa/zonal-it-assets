@@ -393,11 +393,44 @@ function openQrModal(assetId) {
 }
 
 function printQrSticker() {
-  const content = document.getElementById('qr-print-area').outerHTML;
-  const win = window.open('', '', 'width=400,height=400');
-  win.document.write(`<html><body style="text-align:center;font-family:sans-serif;padding:20px;">${content}</body></html>`);
+  const schoolName = document.getElementById('qr-school-name').textContent;
+  const assetInfo = document.getElementById('qr-asset-info').textContent;
+  const assetId = document.getElementById('qr-asset-id').textContent;
+
+  const canvas = document.querySelector('#qr-code-container canvas');
+  const img = document.querySelector('#qr-code-container img');
+  const qrDataUrl = canvas ? canvas.toDataURL('image/png') : (img ? img.src : '');
+
+  if (!qrDataUrl) return alert('QR Code රූපය සකස් වී නොමැත. නැවත උත්සාහ කරන්න.');
+
+  const win = window.open('', '_blank', 'width=420,height=480');
+  if (!win) return alert('Popup blocker නිසා Print කවුළුව විවෘත නොවීය. කරුණාකර Popups Allow කරන්න.');
+
+  win.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>QR Sticker - ${assetInfo}</title>
+      <style>
+        body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 90vh; margin: 0; }
+        .sticker { border: 2px solid #1e293b; border-radius: 12px; padding: 16px 20px; text-align: center; width: 240px; }
+        .school { font-size: 12px; font-weight: bold; color: #334155; margin: 0 0 10px 0; }
+        .qr-img { width: 160px; height: 160px; display: block; margin: 0 auto; }
+        .info { font-size: 13px; font-weight: bold; color: #0f172a; margin: 10px 0 4px 0; }
+        .uuid { font-size: 9px; color: #64748b; word-break: break-all; margin: 0; }
+      </style>
+    </head>
+    <body>
+      <div class="sticker">
+        <p class="school">${schoolName}</p>
+        <img class="qr-img" src="${qrDataUrl}" onload="setTimeout(() => { window.focus(); window.print(); }, 150);" />
+        <p class="info">${assetInfo}</p>
+        <p class="uuid">${assetId}</p>
+      </div>
+    </body>
+    </html>
+  `);
   win.document.close();
-  win.print();
 }
 
 function startScanner() {
