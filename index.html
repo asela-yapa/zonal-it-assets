@@ -63,11 +63,15 @@
       </div>
       <nav class="flex-1 p-3 space-y-1 text-sm">
         <button onclick="showTab('dashboard')" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">📊 Dashboard</button>
-        <button onclick="showTab('assets')" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">💻 Assets & Search</button>
+        <button onclick="showTab('assets')" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">💻 Assets, Edit & Batch QR</button>
         <button onclick="showTab('scanner')" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">📷 QR Code Scanner</button>
         <button onclick="showTab('tickets')" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">🔧 Repair Tickets</button>
         <button id="nav-events" onclick="showTab('events')" class="nav-btn hidden w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">📅 Repair Events</button>
         <button onclick="showTab('bulk')" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">📥 Excel Bulk Upload</button>
+        <button id="nav-approvals" onclick="showTab('approvals')" class="nav-btn hidden w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800 flex items-center justify-between">
+          <span>✅ Approvals (Admin)</span>
+          <span id="pending-approvals-badge" class="hidden bg-amber-500 text-slate-950 text-xs font-bold px-2 py-0.5 rounded-full">0</span>
+        </button>
         <button id="nav-schools" onclick="showTab('schools')" class="nav-btn hidden w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">🏫 Schools (Admin)</button>
         <button id="nav-users" onclick="showTab('users')" class="nav-btn hidden w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">👥 Users (Admin)</button>
         <button onclick="showTab('profile')" class="nav-btn w-full text-left px-4 py-2.5 rounded-lg hover:bg-slate-800">✍️ Profile & Signature</button>
@@ -87,7 +91,6 @@
           <button onclick="exportAssetsToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-semibold">📊 Export All Assets (.xlsx)</button>
         </div>
 
-        <!-- KPI CARDS -->
         <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div class="bg-white p-5 rounded-xl shadow-sm border"><p class="text-xs text-slate-500">මුළු උපකරණ</p><p id="stat-total" class="text-3xl font-bold text-blue-600 mt-1">0</p></div>
           <div class="bg-white p-5 rounded-xl shadow-sm border"><p class="text-xs text-slate-500">වැඩ කරන (Working)</p><p id="stat-working" class="text-3xl font-bold text-green-600 mt-1">0</p></div>
@@ -96,7 +99,6 @@
           <div class="bg-white p-5 rounded-xl shadow-sm border"><p class="text-xs text-slate-500">විවෘත Tickets</p><p id="stat-open-tickets" class="text-3xl font-bold text-purple-600 mt-1">0</p></div>
         </div>
 
-        <!-- CHARTS GRID -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div class="bg-white p-5 rounded-xl shadow-sm border">
             <h3 class="font-bold text-sm text-slate-700 mb-3">උපකරණ වර්ගය අනුව ව්‍යාප්තිය (Assets by Category)</h3>
@@ -108,7 +110,6 @@
           </div>
         </div>
 
-        <!-- SCHOOL-WISE SUMMARY TABLE -->
         <div class="bg-white p-5 rounded-xl shadow-sm border overflow-x-auto">
           <h3 class="font-bold text-sm text-slate-700 mb-3">පාසල් අනුව උපකරණ සාරාංශය (School-wise Summary)</h3>
           <table class="w-full text-sm text-left border-collapse">
@@ -123,12 +124,12 @@
         </div>
       </section>
 
-      <!-- 2. ASSETS, SEARCH & DYNAMIC ENTRY TAB -->
+      <!-- 2. ASSETS, SEARCH, BATCH QR & EDIT/DELETE TAB -->
       <section id="tab-assets" class="tab-content hidden space-y-6">
         <div class="flex flex-wrap justify-between items-center gap-2">
-          <h2 class="text-2xl font-bold">උපකරණ කළමනාකරණය (Assets & Search)</h2>
-          <div class="flex gap-2">
-            <button onclick="exportAssetsToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">📊 Export Excel (.xlsx)</button>
+          <h2 class="text-2xl font-bold">උපකරණ කළමනාකරණය (Assets, Edit & Batch QR)</h2>
+          <div class="flex flex-wrap gap-2">
+            <button onclick="exportAssetsToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-lg text-sm font-medium">📊 Export Excel</button>
             <button onclick="document.getElementById('add-asset-box').classList.toggle('hidden')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">+ නව උපකරණයක් ඇතුළත් කරන්න</button>
           </div>
         </div>
@@ -144,7 +145,7 @@
               </div>
               <div>
                 <label class="block text-sm font-medium mb-1">උපකරණ වර්ගය (Category) *</label>
-                <select id="asset-category" onchange="renderSpecFields()" required class="w-full px-3 py-2 border rounded-lg">
+                <select id="asset-category" onchange="renderSpecFields('asset-category', 'dynamic-specs')" required class="w-full px-3 py-2 border rounded-lg">
                   <option value="Desktop">Desktop</option>
                   <option value="Laptop">Laptop</option>
                   <option value="All-in-One">All-in-One</option>
@@ -199,22 +200,43 @@
           </form>
         </div>
 
-        <!-- SEARCH & FILTER BAR -->
-        <div class="bg-white p-4 rounded-xl shadow-sm border grid grid-cols-1 md:grid-cols-4 gap-3">
-          <select id="filter-school" onchange="filterAssets()" class="px-3 py-2 border rounded-lg text-sm">
-            <option value="">සියලුම පාසල් (All Schools)</option>
-          </select>
-          <select id="filter-category" onchange="filterAssets()" class="px-3 py-2 border rounded-lg text-sm">
-            <option value="">සියලුම වර්ග (All Categories)</option>
-            <option value="Desktop">Desktop</option><option value="Laptop">Laptop</option><option value="All-in-One">All-in-One</option>
-            <option value="Projector">Projector</option><option value="Smart Panel">Smart Panel</option><option value="Printer">Printer</option><option value="UPS">UPS</option>
-          </select>
-          <select id="filter-status" onchange="filterAssets()" class="px-3 py-2 border rounded-lg text-sm">
-            <option value="">සියලුම තත්ත්වයන් (All Status)</option>
-            <option value="Working">Working</option><option value="Faulty">Faulty</option><option value="Under Repair">Under Repair</option>
-            <option value="Waiting for Parts">Waiting for Parts</option><option value="Condemned">Condemned</option>
-          </select>
-          <input type="text" id="filter-search" oninput="filterAssets()" placeholder="Search Inventory, Serial, H81, DDR3..." class="px-3 py-2 border rounded-lg text-sm">
+        <!-- SEARCH, FILTER & BATCH QR PRINT BAR -->
+        <div class="bg-white p-4 rounded-xl shadow-sm border space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <select id="filter-school" onchange="filterAssets()" class="px-3 py-2 border rounded-lg text-sm">
+              <option value="">සියලුම පාසල් (All Schools)</option>
+            </select>
+            <select id="filter-category" onchange="filterAssets()" class="px-3 py-2 border rounded-lg text-sm">
+              <option value="">සියලුම වර්ග (All Categories)</option>
+              <option value="Desktop">Desktop</option><option value="Laptop">Laptop</option><option value="All-in-One">All-in-One</option>
+              <option value="Projector">Projector</option><option value="Smart Panel">Smart Panel</option><option value="Printer">Printer</option><option value="UPS">UPS</option>
+            </select>
+            <select id="filter-status" onchange="filterAssets()" class="px-3 py-2 border rounded-lg text-sm">
+              <option value="">සියලුම තත්ත්වයන් (All Status)</option>
+              <option value="Working">Working</option><option value="Faulty">Faulty</option><option value="Under Repair">Under Repair</option>
+              <option value="Waiting for Parts">Waiting for Parts</option><option value="Condemned">Condemned</option>
+            </select>
+            <input type="text" id="filter-search" oninput="filterAssets()" placeholder="Search Inventory, Serial, H81, DDR3..." class="px-3 py-2 border rounded-lg text-sm">
+          </div>
+
+          <!-- BATCH QR PRINT CONTROLS -->
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t text-xs">
+            <div class="flex items-center gap-3">
+              <label class="flex items-center gap-1.5 font-semibold cursor-pointer">
+                <input type="checkbox" id="select-all-assets" onchange="toggleSelectAllAssets(this.checked)" class="w-4 h-4 accent-blue-600">
+                <span>පෙන්වන සියල්ල තෝරන්න (Select All Filtered)</span>
+              </label>
+              <span class="text-slate-500">තෝරාගත් ගණන: <b id="selected-qr-count" class="text-blue-700">0</b></span>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <label class="text-slate-600">A4 පිටුවකට QR ගණන:</label>
+              <select id="batch-qr-cols" class="border rounded px-2 py-1 bg-slate-50 font-medium">
+                <option value="3">3 × 5 (පිටුවකට 15 - මධ්‍යම)</option>
+                <option value="4">4 × 6 (පිටුවකට 24 - කුඩා)</option>
+              </select>
+              <button onclick="batchPrintSelectedQRs()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-1.5 rounded-lg font-semibold">🖨️ Batch Print Selected QRs (A4)</button>
+            </div>
+          </div>
         </div>
 
         <!-- ASSETS TABLE -->
@@ -222,12 +244,26 @@
           <table class="w-full text-sm text-left border-collapse">
             <thead class="bg-slate-50 border-b">
               <tr>
+                <th class="p-2 w-8 text-center">✓</th>
                 <th class="p-2">පාසල</th><th class="p-2">වර්ගය</th><th class="p-2">Inventory / Serial</th>
                 <th class="p-2">Specs සාරාංශය</th><th class="p-2">තත්ත්වය</th><th class="p-2">ක්‍රියාමාර්ග (Actions)</th>
               </tr>
             </thead>
             <tbody id="assets-table-body" class="divide-y"></tbody>
           </table>
+        </div>
+
+        <!-- MY CHANGE REQUESTS STATUS (FOR SCHOOL IT & TECH TEAM) -->
+        <div id="my-requests-box" class="hidden bg-white p-5 rounded-xl shadow-sm border space-y-3">
+          <h3 class="font-bold text-sm text-slate-800">📋 මා යොමු කළ Edit / Delete ඉල්ලීම්වල තත්ත්වය (Admin Approval Status)</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs text-left">
+              <thead class="bg-slate-50 border-b">
+                <tr><th class="p-2">දිනය</th><th class="p-2">ඉල්ලීම</th><th class="p-2">උපකරණය</th><th class="p-2">හේතුව</th><th class="p-2">තත්ත්වය</th></tr>
+              </thead>
+              <tbody id="my-requests-body" class="divide-y"></tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -283,14 +319,13 @@
         </div>
       </section>
 
-      <!-- 5. REPAIR EVENTS MANAGEMENT TAB (ADMIN & TECH TEAM) -->
+      <!-- 5. REPAIR EVENTS MANAGEMENT TAB -->
       <section id="tab-events" class="tab-content hidden space-y-6">
         <div class="flex flex-wrap justify-between items-center gap-2">
           <h2 class="text-2xl font-bold">අලුත්වැඩියා වැඩසටහන් (Repair Events / Camps)</h2>
           <button id="btn-toggle-event-form" onclick="document.getElementById('create-event-box').classList.toggle('hidden')" class="hidden bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">+ නව වැඩසටහනක් සංවිධානය කරන්න</button>
         </div>
 
-        <!-- CREATE EVENT FORM (ADMIN ONLY) -->
         <div id="create-event-box" class="hidden">
           <form id="event-form" class="bg-white p-6 rounded-xl shadow-sm border space-y-4">
             <h3 class="font-bold text-lg text-blue-700">නව අලුත්වැඩියා වැඩසටහනක් (Repair Event)</h3>
@@ -337,7 +372,6 @@
           </form>
         </div>
 
-        <!-- EVENTS LIST -->
         <div class="bg-white p-5 rounded-xl shadow-sm border overflow-x-auto">
           <table class="w-full text-sm text-left border-collapse">
             <thead class="bg-slate-50 border-b">
@@ -350,7 +384,6 @@
           </table>
         </div>
 
-        <!-- SELECTED EVENT WORKSPACE -->
         <div id="event-workspace" class="hidden bg-white p-6 rounded-xl shadow-md border-2 border-blue-200 space-y-6">
           <div class="flex flex-wrap justify-between items-start gap-4 border-b pb-4">
             <div>
@@ -364,7 +397,6 @@
             </div>
           </div>
 
-          <!-- PARTICIPATING MEMBERS & ATTENDANCE -->
           <div class="bg-slate-50 p-4 rounded-xl border space-y-3">
             <h4 class="font-bold text-sm text-slate-800">👥 සහභාගී වන Technical Team සාමාජිකයින් (පැමිණීම ලකුණු කළ අයගේ අත්සන් PDF වාර්තාවට එක්වේ)</h4>
             <div id="ws-assign-bar" class="hidden flex flex-wrap gap-2">
@@ -374,7 +406,6 @@
             <div id="ws-participants-list" class="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm"></div>
           </div>
 
-          <!-- LOG A REPAIR IN THIS EVENT -->
           <div class="border rounded-xl p-4 space-y-4">
             <h4 class="font-bold text-base text-blue-700">🛠️ මෙම වැඩසටහනේදී අලුත්වැඩියා කළ උපකරණයක් ඇතුළත් කිරීම</h4>
             <form id="event-repair-form" class="space-y-3 text-sm">
@@ -426,7 +457,6 @@
             </form>
           </div>
 
-          <!-- REPAIRS COMPLETED IN THIS EVENT -->
           <div>
             <h4 class="font-bold text-sm mb-2">📋 මෙම වැඩසටහනේදී අලුත්වැඩියා කළ උපකරණ ලැයිස්තුව</h4>
             <div class="overflow-x-auto border rounded-lg">
@@ -448,27 +478,29 @@
       <section id="tab-bulk" class="tab-content hidden space-y-6">
         <h2 class="text-2xl font-bold">Excel / CSV තොග දත්ත ඇතුළත් කිරීම (Bulk Upload)</h2>
         <div class="bg-white p-6 rounded-xl shadow-sm border space-y-4">
-          <div class="flex flex-wrap gap-4 items-center justify-between">
-            <div>
-              <p class="text-sm text-slate-600">1. පළමුව සම්මත Excel ආකෘතිය Download කර දත්ත පුරවන්න.</p>
-              <p class="text-sm text-slate-600">2. පාසල තෝරා සම්පූර්ණ කළ Excel/CSV ගොනුව Upload කරන්න.</p>
+          <div class="flex flex-wrap gap-4 items-center justify-between bg-blue-50 p-4 rounded-xl border border-blue-200">
+            <div class="space-y-1">
+              <p class="text-sm font-bold text-blue-900">පියවර 1: සම්මත Excel ආකෘතිය (Template) බාගත කරන්න</p>
+              <p class="text-xs text-blue-700">පහත බොත්තම ඔබා Excel ගොනුව Download කර, ඔබේ පාසලේ උපකරණ විස්තර එහි ඇතුළත් කර Save කරන්න.</p>
             </div>
-            <button onclick="downloadExcelTemplate()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium">⬇️ Download Excel Template (.xlsx)</button>
+            <button onclick="downloadExcelTemplate()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm">⬇️ Download Excel Template (.xlsx)</button>
           </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t">
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
             <div>
-              <label class="block text-sm font-medium mb-1">අදාළ පාසල තෝරන්න *</label>
+              <label class="block text-sm font-medium mb-1">පියවර 2: අදාළ පාසල තෝරන්න *</label>
               <select id="bulk-school" class="w-full px-3 py-2 border rounded-lg"></select>
             </div>
             <div>
-              <label class="block text-sm font-medium mb-1">Excel (.xlsx) හෝ CSV ගොනුව තෝරන්න *</label>
+              <label class="block text-sm font-medium mb-1">පියවර 3: සම්පූර්ණ කළ Excel (.xlsx) / CSV ගොනුව තෝරන්න *</label>
               <input type="file" id="bulk-file" accept=".xlsx,.xls,.csv" onchange="handleBulkFile(event)" class="w-full px-3 py-1.5 border rounded-lg bg-slate-50">
             </div>
           </div>
-          <div id="bulk-preview-container" class="hidden space-y-3 pt-4">
-            <div class="flex items-center justify-between">
+
+          <div id="bulk-preview-container" class="hidden space-y-3 pt-4 border-t">
+            <div class="flex flex-wrap items-center justify-between gap-2">
               <p id="bulk-status-msg" class="text-sm font-semibold"></p>
-              <button id="btn-bulk-confirm" onclick="confirmBulkUpload()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium">✅ Database එකට ඇතුළත් කරන්න</button>
+              <button id="btn-bulk-confirm" onclick="confirmBulkUpload()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-semibold">✅ Database එකට ඇතුළත් කරන්න</button>
             </div>
             <div class="max-h-64 overflow-y-auto border rounded-lg">
               <table class="w-full text-xs text-left">
@@ -479,10 +511,34 @@
               </table>
             </div>
           </div>
+
+          <!-- POST-UPLOAD BATCH QR PRINT BANNER -->
+          <div id="bulk-success-qr-banner" class="hidden bg-emerald-50 border-2 border-emerald-400 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p id="bulk-success-text" class="font-bold text-emerald-900 text-sm"></p>
+              <p class="text-xs text-emerald-700">ඇතුළත් කළ සියලුම උපකරණවල QR Stickers දැන්ම A4 පිටුවකට Print කරගත හැක.</p>
+            </div>
+            <button onclick="batchPrintAssets(lastBulkUploadedAssets, 3)" class="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-lg text-sm font-semibold">🖨️ Batch Print All Uploaded QRs (A4)</button>
+          </div>
         </div>
       </section>
 
-      <!-- 7. SCHOOLS MANAGEMENT TAB (ADMIN ONLY) -->
+      <!-- 7. ADMIN APPROVALS TAB (ADMIN ONLY) -->
+      <section id="tab-approvals" class="tab-content hidden space-y-6">
+        <div class="flex flex-wrap justify-between items-center gap-2">
+          <h2 class="text-2xl font-bold">උපකරණ දත්ත වෙනස් කිරීම් අනුමත කිරීම (Admin Approvals)</h2>
+          <select id="approval-filter-status" onchange="loadChangeRequests()" class="px-3 py-2 border rounded-lg bg-white text-sm">
+            <option value="Pending">Pending (අනුමැතිය බලාපොරොත්තු වන)</option>
+            <option value="Approved">Approved (අනුමත කළ)</option>
+            <option value="Rejected">Rejected (ප්‍රතික්ෂේප කළ)</option>
+            <option value="">සියල්ල (All)</option>
+          </select>
+        </div>
+
+        <div id="approvals-list" class="space-y-4"></div>
+      </section>
+
+      <!-- 8. SCHOOLS MANAGEMENT TAB (ADMIN ONLY) -->
       <section id="tab-schools" class="tab-content hidden space-y-6">
         <h2 class="text-2xl font-bold">පාසල් කළමනාකරණය (Admin)</h2>
         <form id="school-form" class="bg-white p-6 rounded-xl shadow-sm border grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -503,7 +559,7 @@
         </div>
       </section>
 
-      <!-- 8. USERS MANAGEMENT TAB (ADMIN ONLY) -->
+      <!-- 9. USERS MANAGEMENT TAB (ADMIN ONLY) -->
       <section id="tab-users" class="tab-content hidden space-y-6">
         <h2 class="text-2xl font-bold">පරිශීලක ගිණුම් කළමනාකරණය (Admin)</h2>
         <form id="user-create-form" class="bg-white p-6 rounded-xl shadow-sm border space-y-4">
@@ -533,7 +589,7 @@
         </div>
       </section>
 
-      <!-- 9. USER PROFILE & DIGITAL SIGNATURE TAB -->
+      <!-- 10. USER PROFILE & DIGITAL SIGNATURE TAB -->
       <section id="tab-profile" class="tab-content hidden space-y-6">
         <h2 class="text-2xl font-bold">මගේ තොරතුරු සහ ඩිජිටල් අත්සන (Profile & Signature)</h2>
         <div class="bg-white p-6 rounded-xl shadow-sm border max-w-xl space-y-4">
@@ -563,7 +619,10 @@
     </main>
   </div>
 
-  <!-- MODAL 1: QR CODE STICKER MODAL -->
+  <!-- HIDDEN CONTAINER FOR BATCH QR GENERATION -->
+  <div id="batch-qr-hidden-pool" class="hidden"></div>
+
+  <!-- MODAL 1: SINGLE QR CODE STICKER MODAL -->
   <div id="qr-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
     <div class="bg-white rounded-2xl p-6 max-w-sm w-full text-center space-y-4 shadow-xl">
       <h3 class="font-bold text-lg text-slate-800">Asset QR Sticker</h3>
@@ -589,15 +648,82 @@
         <button onclick="document.getElementById('asset-detail-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
       </div>
       <div id="detail-asset-specs" class="bg-slate-50 p-4 rounded-xl text-sm"></div>
-      <div class="flex justify-between items-center">
+      <div class="flex flex-wrap justify-between items-center gap-2">
         <h4 class="font-bold text-slate-800">අලුත්වැඩියා ඉතිහාසය (Maintenance History)</h4>
-        <button id="btn-detail-report-fault" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium">🔧 Report Fault</button>
+        <div class="flex gap-2">
+          <button id="btn-detail-edit-asset" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium">✏️ Edit Specs / Details</button>
+          <button id="btn-detail-report-fault" class="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium">🔧 Report Fault</button>
+        </div>
       </div>
       <div id="detail-asset-history" class="space-y-2 text-sm"></div>
     </div>
   </div>
 
-  <!-- MODAL 3: REPORT FAULT (NEW TICKET) -->
+  <!-- MODAL 3: EDIT ASSET MODAL (DIRECT FOR ADMIN / APPROVAL REQUEST FOR OTHERS) -->
+  <div id="edit-asset-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl p-6 max-w-3xl w-full max-h-[92vh] overflow-y-auto space-y-4 shadow-xl">
+      <div class="flex justify-between items-center border-b pb-3">
+        <div>
+          <h3 class="font-bold text-lg text-blue-700">✏️ උපකරණ තොරතුරු සහ Specs සංස්කරණය (Edit Asset)</h3>
+          <p id="edit-role-notice" class="text-xs text-amber-700 font-medium mt-0.5"></p>
+        </div>
+        <button onclick="document.getElementById('edit-asset-modal').classList.add('hidden')" class="text-slate-400 hover:text-slate-700 text-xl font-bold">&times;</button>
+      </div>
+
+      <form id="edit-asset-form" class="space-y-4 text-sm">
+        <input type="hidden" id="edit-asset-id">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block font-medium mb-1">උපකරණ වර්ගය (Category)</label>
+            <select id="edit-asset-category" onchange="renderSpecFields('edit-asset-category', 'edit-dynamic-specs')" class="w-full px-3 py-2 border rounded-lg">
+              <option value="Desktop">Desktop</option><option value="Laptop">Laptop</option><option value="All-in-One">All-in-One</option>
+              <option value="Projector">Projector</option><option value="Smart Panel">Smart Panel</option><option value="Printer">Printer</option><option value="UPS">UPS</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-medium mb-1">Inventory අංකය *</label>
+            <input type="text" id="edit-asset-inv" required class="w-full px-3 py-2 border rounded-lg">
+          </div>
+          <div>
+            <label class="block font-medium mb-1">Serial Number</label>
+            <input type="text" id="edit-asset-serial" class="w-full px-3 py-2 border rounded-lg">
+          </div>
+          <div>
+            <label class="block font-medium mb-1">Brand & Model</label>
+            <input type="text" id="edit-asset-brand" class="w-full px-3 py-2 border rounded-lg">
+          </div>
+          <div>
+            <label class="block font-medium mb-1">ස්ථානය (Location)</label>
+            <input type="text" id="edit-asset-location" class="w-full px-3 py-2 border rounded-lg">
+          </div>
+          <div>
+            <label class="block font-medium mb-1">වත්මන් තත්ත්වය</label>
+            <select id="edit-asset-status" class="w-full px-3 py-2 border rounded-lg">
+              <option value="Working">Working</option><option value="Faulty">Faulty</option><option value="Under Repair">Under Repair</option>
+              <option value="Waiting for Parts">Waiting for Parts</option><option value="Condemned">Condemned</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="pt-3 border-t">
+          <h4 class="text-xs font-bold text-blue-700 uppercase mb-2">තාක්ෂණික පිරිවිතර (Hardware Specifications - RAM, Storage, MB, CPU...)</h4>
+          <div id="edit-dynamic-specs" class="grid grid-cols-1 md:grid-cols-3 gap-3"></div>
+        </div>
+
+        <div class="pt-3 border-t">
+          <label class="block font-medium mb-1">වෙනස් කිරීමට හේතුව (Reason for Edit) *</label>
+          <input type="text" id="edit-asset-reason" required class="w-full px-3 py-2 border rounded-lg" placeholder="උදා: 4GB RAM එක 8GB දක්වා වැඩි කිරීම / SSD සවිකිරීම / Serial අංකය නිවැරදි කිරීම">
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="document.getElementById('edit-asset-modal').classList.add('hidden')" class="bg-slate-200 px-4 py-2 rounded-lg">Cancel</button>
+          <button type="submit" id="btn-submit-edit-asset" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-medium">Submit Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL 4: REPORT FAULT (NEW TICKET) -->
   <div id="fault-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
     <div class="bg-white rounded-2xl p-6 max-w-md w-full space-y-4 shadow-xl">
       <h3 class="font-bold text-lg text-amber-700">🔧 දෝෂයක් වාර්තා කිරීම (Report Fault)</h3>
@@ -616,7 +742,7 @@
     </div>
   </div>
 
-  <!-- MODAL 4: TECH TEAM REPAIR UPDATE MODAL -->
+  <!-- MODAL 5: TECH TEAM REPAIR UPDATE MODAL -->
   <div id="repair-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
     <div class="bg-white rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto space-y-4 shadow-xl">
       <h3 class="font-bold text-lg text-blue-700">🛠️ අලුත්වැඩියා විස්තර යාවත්කාලීන කිරීම</h3>
@@ -667,7 +793,7 @@
     </div>
   </div>
 
-  <!-- MODAL 5: OFFICIAL A4 PDF STATUS REPORT PREVIEW & PRINT -->
+  <!-- MODAL 6: OFFICIAL A4 PDF STATUS REPORT PREVIEW & PRINT -->
   <div id="pdf-modal" class="hidden fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50 overflow-y-auto">
     <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[95vh] overflow-y-auto shadow-2xl">
       <div class="no-print flex justify-between items-center p-4 bg-slate-800 text-white rounded-t-2xl sticky top-0">
@@ -677,7 +803,6 @@
           <button onclick="document.getElementById('pdf-modal').classList.add('hidden')" class="bg-slate-600 hover:bg-slate-700 px-3 py-1.5 rounded-lg text-sm">Close</button>
         </div>
       </div>
-      <!-- A4 PRINT SHEET -->
       <div id="pdf-print-sheet" class="p-8 bg-white text-slate-900 space-y-5 text-sm"></div>
     </div>
   </div>
