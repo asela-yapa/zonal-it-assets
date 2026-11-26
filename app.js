@@ -7,6 +7,8 @@ let allUsers = [];
 let allSchools = [];
 let usersMap = {};
 let parsedBulkRows = [];
+let lastBulkUploadedAssets = [];
+let selectedAssetIds = new Set();
 let html5QrScanner = null;
 let activeEventId = null;
 let activeEventObj = null;
@@ -65,9 +67,13 @@ async function loadUserProfile(uid) {
   if (data.role === 'Admin') {
     document.getElementById('nav-schools').classList.remove('hidden');
     document.getElementById('nav-users').classList.remove('hidden');
+    document.getElementById('nav-approvals').classList.remove('hidden');
     document.getElementById('btn-toggle-event-form').classList.remove('hidden');
     document.getElementById('ws-assign-bar').classList.remove('hidden');
+  } else {
+    document.getElementById('my-requests-box').classList.remove('hidden');
   }
+
   if (['Admin', 'Tech_Team'].includes(data.role)) {
     document.getElementById('nav-events').classList.remove('hidden');
   }
@@ -79,11 +85,12 @@ async function loadUserProfile(uid) {
     document.getElementById('saved-sig-preview').classList.remove('hidden');
   }
 
-  renderSpecFields();
+  renderSpecFields('asset-category', 'dynamic-specs');
   await loadUsers();
   await loadSchools();
   await loadAssets();
   await loadTickets();
+  await loadChangeRequests();
   if (['Admin', 'Tech_Team'].includes(data.role)) await loadEvents();
   showTab('dashboard');
 }
@@ -194,62 +201,81 @@ document.getElementById('school-form').addEventListener('submit', async (e) => {
 });
 
 // 4. DYNAMIC HARDWARE SPECS, ASSETS & DASHBOARD CHARTS
-function renderSpecFields() {
-  const cat = document.getElementById('asset-category').value;
-  const container = document.getElementById('dynamic-specs');
-  let html = '';
+function renderSpecFields(catSelectId = 'asset-category', containerId = 'dynamic-specs', existingSpecs = {}) {
+  const cat = document.getElementById(catSelectId).value;
+  const container = document.getElementById(containerId);
+  const s = existingSpecs || {};
+  const val = (...keys) => {
+    for (const k of keys) if (s[k] !== undefined && s[k] !== null) return String(s[k]).replace(/"/g, '&quot;');
+    return '';
+  };
 
+  let html = '';
   if (['Desktop', 'Laptop', 'All-in-One'].includes(cat)) {
     html = `
-      <input id="sp-mb-model" placeholder="Motherboard Brand/Model" class="px-3 py-2 border rounded-lg text-sm">
-      <input id="sp-mb-chipset" placeholder="Motherboard Chipset (H61, H81, H110...)" class="px-3 py-2 border rounded-lg text-sm">
-      <input id="sp-cpu" placeholder="Processor Model (Core i3, i5...)" class="px-3 py-2 border rounded-lg text-sm">
-      <input id="sp-cpu-gen" placeholder="Processor Gen (4th Gen, 10th Gen...)" class="px-3 py-2 border rounded-lg text-sm">
-      <select id="sp-ram-type" class="px-3 py-2 border rounded-lg text-sm">
-        <option value="">RAM Type</option><option>DDR2</option><option>DDR3</option><option>DDR3L</option><option>DDR4</option><option>DDR5</option>
+      <input data-spec="mb_model" value="${val('mb_model', 'mb-model')}" placeholder="Motherboard Brand/Model" class="px-3 py-2 border rounded-lg text-sm">
+      <input data-spec="mb_chipset" value="${val('mb_chipset', 'mb-chipset')}" placeholder="Motherboard Chipset (H61, H81, H110...)" class="px-3 py-2 border rounded-lg text-sm">
+      <input data-spec="cpu" value="${val('cpu')}" placeholder="Processor Model (Core i3, i5...)" class="px-3 py-2 border rounded-lg text-sm">
+      <input data-spec="cpu_gen" value="${val('cpu_gen', 'cpu-gen')}" placeholder="Processor Gen (4th Gen, 10th Gen...)" class="px-3 py-2 border rounded-lg text-sm">
+      <select data-spec="ram_type" class="px-3 py-2 border rounded-lg text-sm">
+        <option value="">RAM Type</option>
+        ${['DDR2', 'DDR3', 'DDR3L', 'DDR4', 'DDR5'].map(t => `<option value="${t}" ${val('ram_type', 'ram-type') === t ? 'selected' : ''}>${t}</option>`).join('')}
       </select>
-      <input id="sp-ram-cap" placeholder="RAM Capacity (4GB, 8GB, 16GB)" class="px-3 py-2 border rounded-lg text-sm">
-      <select id="sp-storage-type" class="px-3 py-2 border rounded-lg text-sm">
-        <option value="">Storage Type</option><option>HDD</option><option>SATA SSD</option><option>NVMe SSD</option>
+      <input data-spec="ram_cap" value="${val('ram_cap', 'ram-cap')}" placeholder="RAM Capacity (4GB, 8GB, 16GB)" class="px-3 py-2 border rounded-lg text-sm">
+      <select data-spec="storage_type" class="px-3 py-2 border rounded-lg text-sm">
+        <option value="">Storage Type</option>
+        ${['HDD', 'SATA SSD', 'NVMe SSD'].map(t => `<option value="${t}" ${val('storage_type', 'storage-type') === t ? 'selected' : ''}>${t}</option>`).join('')}
       </select>
-      <input id="sp-storage-cap" placeholder="Storage Capacity (256GB, 500GB, 1TB)" class="px-3 py-2 border rounded-lg text-sm">
-      <input id="sp-monitor" placeholder="Monitor වර්ගය & ප්‍රමාණය (LED 19)" class="px-3 py-2 border rounded-lg text-sm">
-      <input id="sp-os" placeholder="OS (Windows 10/11, Ubuntu)" class="px-3 py-2 border rounded-lg text-sm">
+      <input data-spec="storage_cap" value="${val('storage_cap', 'storage-cap')}" placeholder="Storage Capacity (256GB, 500GB, 1TB)" class="px-3 py-2 border rounded-lg text-sm">
+      <input data-spec="monitor" value="${val('monitor')}" placeholder="Monitor වර්ගය & ප්‍රමාණය (LED 19)" class="px-3 py-2 border rounded-lg text-sm">
+      <input data-spec="os" value="${val('os')}" placeholder="OS (Windows 10/11, Ubuntu)" class="px-3 py-2 border rounded-lg text-sm">
     `;
   } else if (cat === 'Projector') {
     html = `
-      <select id="sp-proj-tech" class="px-3 py-2 border rounded-lg text-sm"><option value="LCD">LCD</option><option value="DLP">DLP</option></select>
-      <input id="sp-proj-res" placeholder="Resolution (XGA, Full HD)" class="px-3 py-2 border rounded-lg text-sm">
-      <input id="sp-proj-lumens" placeholder="Brightness (Lumens)" class="px-3 py-2 border rounded-lg text-sm">
-      <input id="sp-proj-lamp" placeholder="Lamp Hours / Status" class="px-3 py-2 border rounded-lg text-sm">
+      <select data-spec="proj_tech" class="px-3 py-2 border rounded-lg text-sm">
+        <option value="LCD" ${val('proj_tech', 'proj-tech') === 'LCD' ? 'selected' : ''}>LCD</option>
+        <option value="DLP" ${val('proj_tech', 'proj-tech') === 'DLP' ? 'selected' : ''}>DLP</option>
+      </select>
+      <input data-spec="proj_res" value="${val('proj_res', 'proj-res')}" placeholder="Resolution (XGA, Full HD)" class="px-3 py-2 border rounded-lg text-sm">
+      <input data-spec="proj_lumens" value="${val('proj_lumens', 'proj-lumens')}" placeholder="Brightness (Lumens)" class="px-3 py-2 border rounded-lg text-sm">
+      <input data-spec="proj_lamp" value="${val('proj_lamp', 'proj-lamp')}" placeholder="Lamp Hours / Status" class="px-3 py-2 border rounded-lg text-sm">
     `;
   } else if (cat === 'Smart Panel') {
     html = `
-      <input id="sp-sp-size" placeholder="Screen Size (65, 75, 86 inch)" class="px-3 py-2 border rounded-lg text-sm">
-      <input id="sp-sp-android" placeholder="Android OS Version" class="px-3 py-2 border rounded-lg text-sm">
-      <input id="sp-sp-ops" placeholder="Windows OPS Specs (තිබේ නම්)" class="px-3 py-2 border rounded-lg text-sm">
+      <input data-spec="sp_size" value="${val('sp_size', 'sp-size')}" placeholder="Screen Size (65, 75, 86 inch)" class="px-3 py-2 border rounded-lg text-sm">
+      <input data-spec="sp_android" value="${val('sp_android', 'sp-android')}" placeholder="Android OS Version" class="px-3 py-2 border rounded-lg text-sm">
+      <input data-spec="sp_ops" value="${val('sp_ops', 'sp-ops')}" placeholder="Windows OPS Specs (තිබේ නම්)" class="px-3 py-2 border rounded-lg text-sm">
     `;
   } else if (cat === 'Printer') {
     html = `
-      <select id="sp-pr-type" class="px-3 py-2 border rounded-lg text-sm"><option>Ink Tank</option><option>Laser</option><option>Dot Matrix</option></select>
-      <select id="sp-pr-color" class="px-3 py-2 border rounded-lg text-sm"><option>Color</option><option>Monochrome</option></select>
-      <input id="sp-pr-conn" placeholder="Connectivity (USB / Wi-Fi / LAN)" class="px-3 py-2 border rounded-lg text-sm">
+      <select data-spec="pr_type" class="px-3 py-2 border rounded-lg text-sm">
+        ${['Ink Tank', 'Laser', 'Dot Matrix'].map(t => `<option ${val('pr_type', 'pr-type') === t ? 'selected' : ''}>${t}</option>`).join('')}
+      </select>
+      <select data-spec="pr_color" class="px-3 py-2 border rounded-lg text-sm">
+        ${['Color', 'Monochrome'].map(t => `<option ${val('pr_color', 'pr-color') === t ? 'selected' : ''}>${t}</option>`).join('')}
+      </select>
+      <input data-spec="pr_conn" value="${val('pr_conn', 'pr-conn')}" placeholder="Connectivity (USB / Wi-Fi / LAN)" class="px-3 py-2 border rounded-lg text-sm">
     `;
   } else if (cat === 'UPS') {
     html = `
-      <input id="sp-ups-cap" placeholder="Capacity (650VA, 1200VA, 2kVA)" class="px-3 py-2 border rounded-lg text-sm">
-      <input id="sp-ups-batt" placeholder="Battery Status / අවසන් මාරු කළ දිනය" class="px-3 py-2 border rounded-lg text-sm">
+      <input data-spec="ups_cap" value="${val('ups_cap', 'ups-cap')}" placeholder="Capacity (650VA, 1200VA, 2kVA)" class="px-3 py-2 border rounded-lg text-sm">
+      <input data-spec="ups_batt" value="${val('ups_batt', 'ups-batt')}" placeholder="Battery Status / අවසන් මාරු කළ දිනය" class="px-3 py-2 border rounded-lg text-sm">
     `;
   }
   container.innerHTML = html;
 }
 
+function collectSpecsFromContainer(containerId) {
+  const specs = {};
+  document.querySelectorAll(`#${containerId} [data-spec]`).forEach(el => {
+    if (el.value) specs[el.getAttribute('data-spec')] = el.value;
+  });
+  return specs;
+}
+
 document.getElementById('asset-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const specs = {};
-  document.querySelectorAll('#dynamic-specs input, #dynamic-specs select').forEach(el => {
-    if (el.value) specs[el.id.replace('sp-', '')] = el.value;
-  });
+  const specs = collectSpecsFromContainer('dynamic-specs');
 
   const { error } = await supabaseClient.from('assets').insert({
     school_id: document.getElementById('asset-school').value,
@@ -265,7 +291,7 @@ document.getElementById('asset-form').addEventListener('submit', async (e) => {
   });
   if (error) return alert('Error: ' + error.message);
   e.target.reset();
-  renderSpecFields();
+  renderSpecFields('asset-category', 'dynamic-specs');
   await loadAssets();
   alert('උපකරණය සාර්ථකව ඇතුළත් කරන ලදී!');
 });
@@ -297,12 +323,7 @@ function renderDashboardCharts(workingCount, faultyCount, condemnedCount) {
     type: 'bar',
     data: {
       labels: categories,
-      datasets: [{
-        label: 'උපකරණ ගණන',
-        data: catCounts,
-        backgroundColor: '#2563eb',
-        borderRadius: 6
-      }]
+      datasets: [{ label: 'උපකරණ ගණන', data: catCounts, backgroundColor: '#2563eb', borderRadius: 6 }]
     },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
   });
@@ -312,10 +333,7 @@ function renderDashboardCharts(workingCount, faultyCount, condemnedCount) {
     type: 'doughnut',
     data: {
       labels: ['Working', 'Faulty / Under Repair', 'Condemned'],
-      datasets: [{
-        data: [workingCount, faultyCount, condemnedCount],
-        backgroundColor: ['#16a34a', '#d97706', '#dc2626']
-      }]
+      datasets: [{ data: [workingCount, faultyCount, condemnedCount], backgroundColor: ['#16a34a', '#d97706', '#dc2626'] }]
     },
     options: { responsive: true, maintainAspectRatio: false }
   });
@@ -365,6 +383,9 @@ function filterAssets() {
 
   document.getElementById('assets-table-body').innerHTML = currentFilteredAssets.map(a => `
     <tr>
+      <td class="p-2 text-center">
+        <input type="checkbox" ${selectedAssetIds.has(a.asset_id) ? 'checked' : ''} onchange="toggleAssetSelection('${a.asset_id}', this.checked)" class="w-4 h-4 accent-blue-600 cursor-pointer">
+      </td>
       <td class="p-2 font-medium">${a.schools?.school_name || '-'}</td>
       <td class="p-2">${a.category}</td>
       <td class="p-2 text-xs"><b>${a.inventory_no}</b><br><span class="text-slate-500">SN: ${a.serial_no || '-'}</span></td>
@@ -373,14 +394,359 @@ function filterAssets() {
       <td class="p-2 space-x-1 whitespace-nowrap">
         <button onclick="openQrModal('${a.asset_id}')" class="bg-slate-800 text-white px-2 py-1 rounded text-xs">QR</button>
         <button onclick="openAssetDetail('${a.asset_id}')" class="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">Details</button>
-        <button onclick="openFaultModal('${a.asset_id}')" class="bg-amber-100 text-amber-800 px-2 py-1 rounded text-xs font-medium">🔧 Fault</button>
+        <button onclick="openEditAssetModal('${a.asset_id}')" class="bg-indigo-100 text-indigo-800 px-2 py-1 rounded text-xs font-medium">✏️ Edit</button>
+        <button onclick="requestDeleteAsset('${a.asset_id}')" class="bg-red-100 text-red-800 px-2 py-1 rounded text-xs font-medium">🗑️</button>
+        <button onclick="openFaultModal('${a.asset_id}')" class="bg-amber-100 text-amber-800 px-2 py-1 rounded text-xs font-medium">🔧</button>
       </td>
     </tr>
   `).join('');
+
+  updateSelectedQrCount();
 }
 
-// 5. QR CODE GENERATION & SCANNER
+// 5. EDIT & DELETE ASSET WITH ADMIN APPROVAL WORKFLOW
+function openEditAssetModal(assetId) {
+  const a = allAssets.find(x => x.asset_id === assetId);
+  if (!a) return;
 
+  document.getElementById('edit-asset-id').value = a.asset_id;
+  document.getElementById('edit-asset-category').value = a.category;
+  document.getElementById('edit-asset-inv').value = a.inventory_no || '';
+  document.getElementById('edit-asset-serial').value = a.serial_no || '';
+  document.getElementById('edit-asset-brand').value = a.brand_model || '';
+  document.getElementById('edit-asset-location').value = a.location || '';
+  document.getElementById('edit-asset-status').value = a.current_status || 'Working';
+  document.getElementById('edit-asset-reason').value = '';
+
+  renderSpecFields('edit-asset-category', 'edit-dynamic-specs', a.specs || {});
+
+  const notice = document.getElementById('edit-role-notice');
+  const submitBtn = document.getElementById('btn-submit-edit-asset');
+  if (currentUser.role === 'Admin') {
+    notice.textContent = 'Admin වරප්‍රසාදය: ඔබ සිදුකරන වෙනස්කම් කෙලින්ම Database එකට යාවත්කාලීන වේ.';
+    submitBtn.textContent = 'Save Changes Now';
+  } else {
+    notice.textContent = 'සැ.යු: ඔබ යොමු කරන වෙනස්කම් System Admin අනුමත කළ පසු පමණක් පද්ධතියේ යාවත්කාලීන වේ.';
+    submitBtn.textContent = 'Submit for Admin Approval';
+  }
+
+  document.getElementById('edit-asset-modal').classList.remove('hidden');
+}
+
+document.getElementById('edit-asset-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const assetId = document.getElementById('edit-asset-id').value;
+  const a = allAssets.find(x => x.asset_id === assetId);
+  if (!a) return;
+
+  const updatedFields = {
+    category: document.getElementById('edit-asset-category').value,
+    inventory_no: document.getElementById('edit-asset-inv').value,
+    serial_no: document.getElementById('edit-asset-serial').value || null,
+    brand_model: document.getElementById('edit-asset-brand').value || null,
+    location: document.getElementById('edit-asset-location').value || null,
+    current_status: document.getElementById('edit-asset-status').value,
+    specs: collectSpecsFromContainer('edit-dynamic-specs')
+  };
+  const reason = document.getElementById('edit-asset-reason').value.trim();
+
+  if (currentUser.role === 'Admin') {
+    const { error } = await supabaseClient.from('assets').update({
+      ...updatedFields,
+      updated_at: new Date().toISOString()
+    }).eq('asset_id', assetId);
+    if (error) return alert('Update Error: ' + error.message);
+
+    document.getElementById('edit-asset-modal').classList.add('hidden');
+    await loadAssets();
+    alert('උපකරණ තොරතුරු සාර්ථකව යාවත්කාලීන කරන ලදී!');
+  } else {
+    const oldData = {
+      school_name: a.schools?.school_name || '',
+      category: a.category,
+      inventory_no: a.inventory_no,
+      serial_no: a.serial_no,
+      brand_model: a.brand_model,
+      location: a.location,
+      current_status: a.current_status,
+      specs: a.specs || {}
+    };
+
+    const { error } = await supabaseClient.from('asset_change_requests').insert({
+      asset_id: assetId,
+      school_id: a.school_id,
+      request_type: 'EDIT',
+      old_data: oldData,
+      proposed_data: updatedFields,
+      reason,
+      requested_by: currentUser.user_id,
+      status: 'Pending'
+    });
+    if (error) return alert('Request Error: ' + error.message);
+
+    document.getElementById('edit-asset-modal').classList.add('hidden');
+    await loadChangeRequests();
+    alert('ඔබගේ සංස්කරණ ඉල්ලීම Admin අනුමැතිය (Approval) සඳහා යොමු කරන ලදී. Admin අනුමත කළ පසු දත්ත යාවත්කාලීන වේ.');
+  }
+});
+
+async function requestDeleteAsset(assetId) {
+  const a = allAssets.find(x => x.asset_id === assetId);
+  if (!a) return;
+
+  if (currentUser.role === 'Admin') {
+    if (!confirm(`"${a.category} - ${a.inventory_no}" ස්ථිරවම මකා දැමීමට (Delete) අවශ්‍ය බව තහවුරු කරන්න.`)) return;
+    const { error } = await supabaseClient.from('assets').delete().eq('asset_id', assetId);
+    if (error) return alert('Delete Error: ' + error.message);
+    await loadAssets();
+    alert('උපකරණය පද්ධතියෙන් ඉවත් කරන ලදී.');
+  } else {
+    const reason = prompt(`"${a.category} - ${a.inventory_no}" ඉවත් කිරීමට (Delete) Admin අනුමැතිය අවශ්‍ය වේ.\n\nඉවත් කිරීමට හේතුව සඳහන් කරන්න:`);
+    if (!reason || !reason.trim()) return;
+
+    const { error } = await supabaseClient.from('asset_change_requests').insert({
+      asset_id: assetId,
+      school_id: a.school_id,
+      request_type: 'DELETE',
+      old_data: {
+        school_name: a.schools?.school_name || '',
+        category: a.category,
+        inventory_no: a.inventory_no,
+        serial_no: a.serial_no,
+        brand_model: a.brand_model,
+        specs: a.specs || {}
+      },
+      proposed_data: {},
+      reason: reason.trim(),
+      requested_by: currentUser.user_id,
+      status: 'Pending'
+    });
+    if (error) return alert('Request Error: ' + error.message);
+    await loadChangeRequests();
+    alert('උපකරණය ඉවත් කිරීමේ ඉල්ලීම Admin අනුමැතිය සඳහා යොමු කරන ලදී.');
+  }
+}
+
+async function loadChangeRequests() {
+  const statusFilter = document.getElementById('approval-filter-status')?.value;
+  let query = supabaseClient.from('asset_change_requests')
+    .select('*, schools(school_name)')
+    .order('requested_at', { ascending: false });
+
+  if (currentUser.role === 'Admin' && statusFilter) {
+    query = query.eq('status', statusFilter);
+  } else if (currentUser.role !== 'Admin') {
+    query = query.eq('requested_by', currentUser.user_id);
+  }
+
+  const { data } = await query;
+  const requests = data || [];
+
+  if (currentUser.role === 'Admin') {
+    // Count all pending requests for badge
+    const { count } = await supabaseClient.from('asset_change_requests')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'Pending');
+
+    const badge = document.getElementById('pending-approvals-badge');
+    if (count && count > 0) {
+      badge.textContent = count;
+      badge.classList.remove('hidden');
+    } else {
+      badge.classList.add('hidden');
+    }
+
+    const container = document.getElementById('approvals-list');
+    container.innerHTML = requests.length ? requests.map(r => {
+      const reqUser = usersMap[r.requested_by]?.full_name || 'User';
+      const oldSpecsStr = Object.entries(r.old_data?.specs || {}).map(([k,v]) => `${k}: ${v}`).join(', ') || '-';
+      const newSpecsStr = Object.entries(r.proposed_data?.specs || {}).map(([k,v]) => `${k}: ${v}`).join(', ') || '-';
+      const isEdit = r.request_type === 'EDIT';
+
+      return `
+        <div class="bg-white p-5 rounded-xl shadow-sm border space-y-3">
+          <div class="flex flex-wrap justify-between items-start gap-2 border-b pb-2">
+            <div>
+              <span class="px-2.5 py-0.5 rounded text-xs font-bold ${isEdit ? 'bg-indigo-100 text-indigo-800' : 'bg-red-100 text-red-800'}">${r.request_type} REQUEST</span>
+              <span class="font-bold text-sm ml-2">${r.schools?.school_name || r.old_data?.school_name || ''} — ${r.old_data?.category || ''} (${r.old_data?.inventory_no || ''})</span>
+              <p class="text-xs text-slate-500 mt-1">ඉල්ලීම කළේ: <b>${reqUser}</b> | දිනය: ${new Date(r.requested_at).toLocaleString()}</p>
+            </div>
+            <span class="px-2.5 py-1 rounded-full text-xs font-semibold ${r.status === 'Pending' ? 'bg-amber-100 text-amber-800' : r.status === 'Approved' ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-700'}">${r.status}</span>
+          </div>
+
+          <p class="text-xs bg-amber-50 p-2 rounded border border-amber-200"><b>හේතුව (Reason):</b> ${r.reason || '-'}</p>
+
+          ${isEdit ? `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div class="bg-slate-50 p-3 rounded-lg border">
+                <p class="font-bold text-slate-600 mb-1">පැරණි දත්ත (Current Values)</p>
+                <p><b>Inv / SN:</b> ${r.old_data?.inventory_no || '-'} / ${r.old_data?.serial_no || '-'}</p>
+                <p><b>Brand/Model:</b> ${r.old_data?.brand_model || '-'} | <b>Status:</b> ${r.old_data?.current_status || '-'}</p>
+                <p class="mt-1"><b>Specs:</b> ${oldSpecsStr}</p>
+              </div>
+              <div class="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                <p class="font-bold text-blue-800 mb-1">අලුතින් යෝජිත දත්ත (Proposed Values)</p>
+                <p><b>Inv / SN:</b> ${r.proposed_data?.inventory_no || '-'} / ${r.proposed_data?.serial_no || '-'}</p>
+                <p><b>Brand/Model:</b> ${r.proposed_data?.brand_model || '-'} | <b>Status:</b> ${r.proposed_data?.current_status || '-'}</p>
+                <p class="mt-1"><b>Specs:</b> ${newSpecsStr}</p>
+              </div>
+            </div>
+          ` : `<p class="text-xs text-red-700 font-semibold">⚠️ මෙම උපකරණය පද්ධතියෙන් ස්ථිරවම ඉවත් කිරීමට (Delete) අනුමැතිය ඉල්ලා ඇත.</p>`}
+
+          ${r.status === 'Pending' ? `
+            <div class="flex justify-end gap-2 pt-2">
+              <button onclick="processChangeRequest('${r.request_id}', 'Rejected')" class="bg-slate-200 hover:bg-slate-300 text-slate-800 px-4 py-1.5 rounded-lg text-xs font-semibold">❌ Reject</button>
+              <button onclick="processChangeRequest('${r.request_id}', 'Approved')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-1.5 rounded-lg text-xs font-semibold">✅ Approve & Apply</button>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }).join('') : '<div class="bg-white p-6 rounded-xl border text-center text-sm text-slate-500">අනුමැතිය සඳහා ඉල්ලීම් නොමැත.</div>';
+  } else {
+    const tbody = document.getElementById('my-requests-body');
+    if (tbody) {
+      tbody.innerHTML = requests.length ? requests.map(r => `
+        <tr>
+          <td class="p-2">${new Date(r.requested_at).toLocaleDateString()}</td>
+          <td class="p-2 font-bold">${r.request_type}</td>
+          <td class="p-2">${r.old_data?.category || ''} (${r.old_data?.inventory_no || ''})</td>
+          <td class="p-2">${r.reason || '-'}</td>
+          <td class="p-2 font-semibold ${r.status === 'Approved' ? 'text-green-700' : r.status === 'Rejected' ? 'text-red-600' : 'text-amber-600'}">${r.status}</td>
+        </tr>
+      `).join('') : '<tr><td colspan="5" class="p-2 text-center text-slate-400">ඉල්ලීම් නොමැත</td></tr>';
+    }
+  }
+}
+
+async function processChangeRequest(requestId, decision) {
+  const { data: req, error: fetchErr } = await supabaseClient.from('asset_change_requests').select('*').eq('request_id', requestId).single();
+  if (fetchErr || !req) return alert('Request සොයාගත නොහැක.');
+
+  if (decision === 'Approved') {
+    if (req.request_type === 'EDIT' && req.asset_id) {
+      const { error: upErr } = await supabaseClient.from('assets').update({
+        ...req.proposed_data,
+        updated_at: new Date().toISOString()
+      }).eq('asset_id', req.asset_id);
+      if (upErr) return alert('Asset Update Error: ' + upErr.message);
+    } else if (req.request_type === 'DELETE' && req.asset_id) {
+      await supabaseClient.from('asset_change_requests').update({
+        status: 'Approved',
+        reviewed_by: currentUser.user_id,
+        reviewed_at: new Date().toISOString()
+      }).eq('request_id', requestId);
+
+      const { error: delErr } = await supabaseClient.from('assets').delete().eq('asset_id', req.asset_id);
+      if (delErr) return alert('Asset Delete Error: ' + delErr.message);
+
+      await loadAssets();
+      await loadChangeRequests();
+      return alert('ඉල්ලීම අනුමත කර උපකරණය පද්ධතියෙන් ඉවත් කරන ලදී.');
+    }
+  }
+
+  const { error } = await supabaseClient.from('asset_change_requests').update({
+    status: decision,
+    reviewed_by: currentUser.user_id,
+    reviewed_at: new Date().toISOString()
+  }).eq('request_id', requestId);
+
+  if (error) return alert('Error: ' + error.message);
+  await loadAssets();
+  await loadChangeRequests();
+  alert(decision === 'Approved' ? 'ඉල්ලීම අනුමත කර දත්ත යාවත්කාලීන කරන ලදී!' : 'ඉල්ලීම ප්‍රතික්ෂේප කරන ලදී.');
+}
+
+// 6. SINGLE & BATCH QR CODE GENERATION (A4 GRID PRINT)
+function toggleAssetSelection(assetId, checked) {
+  if (checked) selectedAssetIds.add(assetId);
+  else selectedAssetIds.delete(assetId);
+  updateSelectedQrCount();
+}
+
+function toggleSelectAllAssets(checked) {
+  currentFilteredAssets.forEach(a => {
+    if (checked) selectedAssetIds.add(a.asset_id);
+    else selectedAssetIds.delete(a.asset_id);
+  });
+  filterAssets();
+}
+
+function updateSelectedQrCount() {
+  const el = document.getElementById('selected-qr-count');
+  if (el) el.textContent = selectedAssetIds.size;
+}
+
+function batchPrintSelectedQRs() {
+  const chosen = allAssets.filter(a => selectedAssetIds.has(a.asset_id));
+  if (!chosen.length) return alert('කරුණාකර QR Print කිරීමට අවශ්‍ය උපකරණ තෝරන්න (Checkbox ටික් කරන්න).');
+  const cols = parseInt(document.getElementById('batch-qr-cols').value) || 3;
+  batchPrintAssets(chosen, cols);
+}
+
+function batchPrintAssets(assetsList, cols = 3) {
+  if (!assetsList || !assetsList.length) return alert('Print කිරීමට උපකරණ නොමැත.');
+  const pool = document.getElementById('batch-qr-hidden-pool');
+  pool.innerHTML = '';
+
+  const stickerItems = assetsList.map((a, idx) => {
+    const holder = document.createElement('div');
+    holder.id = `tmp-qr-${idx}`;
+    pool.appendChild(holder);
+    new QRCode(holder, { text: a.asset_id, width: 140, height: 140 });
+    const canvas = holder.querySelector('canvas');
+    const img = holder.querySelector('img');
+    const dataUrl = canvas ? canvas.toDataURL('image/png') : (img ? img.src : '');
+    const sName = a.schools?.school_name || allSchools.find(s => s.school_id === a.school_id)?.school_name || '';
+
+    return `
+      <div class="sticker">
+        <p class="school">${sName}</p>
+        <img class="qr-img" src="${dataUrl}" />
+        <p class="info">${a.category} | ${a.inventory_no}</p>
+        <p class="serial">S/N: ${a.serial_no || 'N/A'}</p>
+        <p class="uuid">${a.asset_id}</p>
+      </div>
+    `;
+  }).join('');
+
+  pool.innerHTML = '';
+  const qrSize = cols === 4 ? '105px' : '130px';
+
+  const win = window.open('', '_blank', 'width=900,height=700');
+  if (!win) return alert('Popup blocker නිසා Print කවුළුව විවෘත නොවීය. කරුණාකර Popups Allow කරන්න.');
+
+  win.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Batch QR Stickers (A4)</title>
+      <style>
+        @page { size: A4 portrait; margin: 10mm; }
+        body { font-family: sans-serif; margin: 0; padding: 0; }
+        .grid { display: grid; grid-template-columns: repeat(${cols}, 1fr); gap: 8px; }
+        .sticker {
+          border: 1.5px solid #1e293b;
+          border-radius: 8px;
+          padding: 8px 6px;
+          text-align: center;
+          page-break-inside: avoid;
+          break-inside: avoid;
+        }
+        .school { font-size: 10px; font-weight: bold; color: #334155; margin: 0 0 5px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .qr-img { width: ${qrSize}; height: ${qrSize}; display: block; margin: 0 auto; }
+        .info { font-size: 11px; font-weight: bold; color: #0f172a; margin: 5px 0 1px 0; }
+        .serial { font-size: 10px; font-weight: bold; color: #1e293b; margin: 1px 0 3px 0; }
+        .uuid { font-size: 7.5px; color: #64748b; word-break: break-all; margin: 0; }
+      </style>
+    </head>
+    <body onload="setTimeout(() => { window.focus(); window.print(); }, 250);">
+      <div class="grid">${stickerItems}</div>
+    </body>
+    </html>
+  `);
+  win.document.close();
+}
 
 function openQrModal(assetId) {
   const a = allAssets.find(x => x.asset_id === assetId);
@@ -388,16 +754,7 @@ function openQrModal(assetId) {
 
   document.getElementById('qr-school-name').textContent = a.schools?.school_name || '';
   document.getElementById('qr-asset-info').textContent = `${a.category} | ${a.inventory_no}`;
-
-  let serialEl = document.getElementById('qr-serial-no');
-  if (!serialEl) {
-    serialEl = document.createElement('p');
-    serialEl.id = 'qr-serial-no';
-    serialEl.className = 'text-xs font-semibold text-slate-700 mt-0.5';
-    document.getElementById('qr-asset-info').after(serialEl);
-  }
-  serialEl.textContent = `S/N: ${a.serial_no || 'N/A'}`;
-
+  document.getElementById('qr-serial-no').textContent = `S/N: ${a.serial_no || 'N/A'}`;
   document.getElementById('qr-asset-id').textContent = a.asset_id;
   const qrBox = document.getElementById('qr-code-container');
   qrBox.innerHTML = '';
@@ -418,7 +775,7 @@ function printQrSticker() {
   if (!qrDataUrl) return alert('QR Code රූපය සකස් වී නොමැත. නැවත උත්සාහ කරන්න.');
 
   const win = window.open('', '_blank', 'width=420,height=500');
-  if (!win) return alert('Popup blocker නිසා Print කවුළුව විවෘත නොවීය. කරුණාකර Popups Allow කරන්න.');
+  if (!win) return alert('Popup blocker නිසා Print කවුළුව විවෘත නොවීය.');
 
   win.document.write(`
     <!DOCTYPE html>
@@ -449,6 +806,7 @@ function printQrSticker() {
   win.document.close();
 }
 
+// 7. QR SCANNER & ASSET DETAIL MODAL
 function startScanner() {
   const msg = document.getElementById('scan-result-msg');
   msg.textContent = 'Camera ආරම්භ වෙමින් පවතී...';
@@ -489,6 +847,10 @@ async function openAssetDetail(assetId) {
       ${Object.entries(a.specs || {}).map(([k, v]) => `<div><b>${k}:</b> ${v}</div>`).join('') || 'Specs ඇතුළත් කර නොමැත'}
     </div>
   `;
+  document.getElementById('btn-detail-edit-asset').onclick = () => {
+    document.getElementById('asset-detail-modal').classList.add('hidden');
+    openEditAssetModal(a.asset_id);
+  };
   document.getElementById('btn-detail-report-fault').onclick = () => {
     document.getElementById('asset-detail-modal').classList.add('hidden');
     openFaultModal(a.asset_id);
@@ -508,7 +870,7 @@ async function openAssetDetail(assetId) {
   document.getElementById('asset-detail-modal').classList.remove('hidden');
 }
 
-// 6. REPAIR TICKETING & ASSIGNMENT
+// 8. REPAIR TICKETING & ASSIGNMENT
 function openFaultModal(assetId) {
   const a = allAssets.find(x => x.asset_id === assetId);
   document.getElementById('fault-asset-id').value = assetId;
@@ -626,7 +988,7 @@ document.getElementById('repair-form').addEventListener('submit', async (e) => {
   alert('අලුත්වැඩියා විස්තර සාර්ථකව සුරැකුණි!');
 });
 
-// 7. REPAIR EVENTS MANAGEMENT & EVENT WORKSPACE
+// 9. REPAIR EVENTS MANAGEMENT & EVENT WORKSPACE
 async function loadEvents() {
   const { data } = await supabaseClient.from('repair_events').select('*').order('event_date', { ascending: false });
   const events = data || [];
@@ -780,7 +1142,7 @@ async function loadEventLogs() {
     : '<tr><td colspan="6" class="p-3 text-center text-slate-500">මෙම වැඩසටහන සඳහා තවම අලුත්වැඩියා වාර්තා ඇතුළත් කර නොමැත.</td></tr>';
 }
 
-// 8. EXCEL EXPORT FUNCTIONS (ASSETS, TICKETS & EVENT SUMMARY)
+// 10. EXCEL EXPORT FUNCTIONS
 function exportAssetsToExcel() {
   if (!currentFilteredAssets.length) return alert('Export කිරීමට දත්ත නොමැත.');
   const rows = currentFilteredAssets.map(a => ({
@@ -794,14 +1156,16 @@ function exportAssetsToExcel() {
     Received_Year: a.received_year || '',
     Funding_Source: a.funding_source || '',
     Status: a.current_status,
-    MB_Chipset: a.specs?.['mb-chipset'] || a.specs?.mb_chipset || '',
+    MB_Model: a.specs?.mb_model || a.specs?.['mb-model'] || '',
+    MB_Chipset: a.specs?.mb_chipset || a.specs?.['mb-chipset'] || '',
     Processor: a.specs?.cpu || '',
-    Processor_Gen: a.specs?.['cpu-gen'] || a.specs?.cpu_gen || '',
-    RAM_Type: a.specs?.['ram-type'] || a.specs?.ram_type || '',
-    RAM_Capacity: a.specs?.['ram-cap'] || a.specs?.ram_cap || '',
-    Storage_Type: a.specs?.['storage-type'] || a.specs?.storage_type || '',
-    Storage_Capacity: a.specs?.['storage-cap'] || a.specs?.storage_cap || '',
-    Monitor: a.specs?.monitor || ''
+    Processor_Gen: a.specs?.cpu_gen || a.specs?.['cpu-gen'] || '',
+    RAM_Type: a.specs?.ram_type || a.specs?.['ram-type'] || '',
+    RAM_Capacity: a.specs?.ram_cap || a.specs?.['ram-cap'] || '',
+    Storage_Type: a.specs?.storage_type || a.specs?.['storage-type'] || '',
+    Storage_Capacity: a.specs?.storage_cap || a.specs?.['storage-cap'] || '',
+    Monitor: a.specs?.monitor || '',
+    OS: a.specs?.os || ''
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -863,7 +1227,7 @@ function exportEventReportToExcel() {
   XLSX.writeFile(wb, `${safeName}_Report.xlsx`);
 }
 
-// 9. OFFICIAL A4 PDF STATUS REPORT GENERATOR
+// 11. OFFICIAL A4 PDF STATUS REPORT GENERATOR
 async function openPdfReport(logId) {
   const { data: log, error } = await supabaseClient.from('maintenance_logs')
     .select('*, assets(*, schools(*)), repair_events(*)')
@@ -876,7 +1240,7 @@ async function openPdfReport(logId) {
   const school = asset.schools || {};
   const specsEntries = Object.entries(asset.specs || {});
   const specsHtml = specsEntries.length
-    ? specsEntries.map(([k, v]) => `<div class="border p-1.5 bg-slate-50"><span class="text-slate-500 uppercase text-[10px] block">${k.replace(/_/g, ' ')}</span><b>${v}</b></div>`).join('')
+    ? specsEntries.map(([k, v]) => `<div class="border p-1.5 bg-slate-50"><span class="text-slate-500 uppercase text-[10px] block">${k.replace(/[_-]/g, ' ')}</span><b>${v}</b></div>`).join('')
     : '<p class="text-slate-500 text-xs">තාක්ෂණික පිරිවිතර ඇතුළත් කර නොමැත.</p>';
 
   let signers = [];
@@ -993,23 +1357,43 @@ async function openPdfReport(logId) {
   document.getElementById('pdf-modal').classList.remove('hidden');
 }
 
-// 10. EXCEL BULK UPLOAD
+// 12. EXCEL BULK UPLOAD (TEMPLATE DOWNLOAD + VALIDATION + POST-UPLOAD BATCH QR)
 function downloadExcelTemplate() {
-  const sample = [{
-    category: 'Desktop', inventory_no: 'INV-001', serial_no: 'SN12345', brand_model: 'Dell Optiplex 3020',
-    location: 'IT Lab 1', received_year: 2023, funding_source: 'Ministry', current_status: 'Working',
-    mb_chipset: 'H81', processor: 'Intel Core i3', processor_gen: '4th Gen',
-    ram_type: 'DDR3', ram_capacity: '8GB', storage_type: 'SATA SSD', storage_capacity: '256GB', monitor: 'LED 19"'
-  }];
-  const ws = XLSX.utils.json_to_sheet(sample);
+  const sampleRows = [
+    {
+      category: 'Desktop', inventory_no: 'INV-2026-001', serial_no: 'SN-DELL-001', brand_model: 'Dell Optiplex 3020',
+      location: 'IT Lab 1', received_year: 2023, funding_source: 'Ministry', current_status: 'Working',
+      mb_model: 'Dell 0WMJ54', mb_chipset: 'H81', processor: 'Intel Core i3', processor_gen: '4th Gen',
+      ram_type: 'DDR3', ram_capacity: '8GB', storage_type: 'SATA SSD', storage_capacity: '256GB', monitor: 'LED 19"', os: 'Windows 10'
+    },
+    {
+      category: 'Projector', inventory_no: 'INV-2026-002', serial_no: 'SN-EPS-002', brand_model: 'Epson EB-X41',
+      location: 'Smart Classroom', received_year: 2024, funding_source: 'Provincial', current_status: 'Working',
+      mb_model: '', mb_chipset: '', processor: '', processor_gen: '',
+      ram_type: '', ram_capacity: '', storage_type: '', storage_capacity: '', monitor: '', os: ''
+    }
+  ];
+
+  const instructions = [
+    { Field: 'category (Required)', Allowed_Values: 'Desktop, Laptop, All-in-One, Projector, Smart Panel, Printer, UPS' },
+    { Field: 'inventory_no (Required)', Allowed_Values: 'පාසලේ බඩු වට්ටෝරු අංකය (උදා: INV-001)' },
+    { Field: 'serial_no', Allowed_Values: 'උපකරණයේ Serial Number එක' },
+    { Field: 'current_status', Allowed_Values: 'Working, Faulty, Under Repair, Waiting for Parts, Condemned' },
+    { Field: 'ram_type', Allowed_Values: 'DDR2, DDR3, DDR3L, DDR4, DDR5' },
+    { Field: 'storage_type', Allowed_Values: 'HDD, SATA SSD, NVMe SSD' }
+  ];
+
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Assets_Template');
-  XLSX.writeFile(wb, 'Zonal_IT_Assets_Template.xlsx');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sampleRows), 'Assets_Upload');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(instructions), 'Instructions');
+  XLSX.writeFile(wb, 'Zonal_IT_Assets_Bulk_Template.xlsx');
 }
 
 function handleBulkFile(e) {
   const file = e.target.files[0];
   if (!file) return;
+  document.getElementById('bulk-success-qr-banner').classList.add('hidden');
+
   const reader = new FileReader();
   reader.onload = (evt) => {
     const wb = XLSX.read(evt.target.result, { type: 'binary' });
@@ -1019,32 +1403,46 @@ function handleBulkFile(e) {
     tbody.innerHTML = '';
     let validCount = 0;
 
+    const validCategories = ['Desktop', 'Laptop', 'All-in-One', 'Projector', 'Smart Panel', 'Printer', 'UPS'];
+
     rows.forEach(r => {
-      const isValid = r.category && r.inventory_no;
+      const cat = String(r.category || '').trim();
+      const inv = String(r.inventory_no || '').trim();
+      const isValid = validCategories.includes(cat) && inv.length > 0;
+
       if (isValid) {
         validCount++;
+        const specs = {};
+        if (r.mb_model) specs.mb_model = String(r.mb_model);
+        if (r.mb_chipset) specs.mb_chipset = String(r.mb_chipset);
+        if (r.processor) specs.cpu = String(r.processor);
+        if (r.processor_gen) specs.cpu_gen = String(r.processor_gen);
+        if (r.ram_type) specs.ram_type = String(r.ram_type);
+        if (r.ram_capacity) specs.ram_cap = String(r.ram_capacity);
+        if (r.storage_type) specs.storage_type = String(r.storage_type);
+        if (r.storage_capacity) specs.storage_cap = String(r.storage_capacity);
+        if (r.monitor) specs.monitor = String(r.monitor);
+        if (r.os) specs.os = String(r.os);
+
         parsedBulkRows.push({
           school_id: document.getElementById('bulk-school').value,
-          category: r.category,
-          inventory_no: String(r.inventory_no),
-          serial_no: r.serial_no ? String(r.serial_no) : null,
-          brand_model: r.brand_model || null,
-          location: r.location || null,
+          category: cat,
+          inventory_no: inv,
+          serial_no: r.serial_no ? String(r.serial_no).trim() : null,
+          brand_model: r.brand_model ? String(r.brand_model).trim() : null,
+          location: r.location ? String(r.location).trim() : null,
           received_year: parseInt(r.received_year) || null,
-          funding_source: r.funding_source || null,
-          current_status: r.current_status || 'Working',
-          specs: {
-            mb_chipset: r.mb_chipset || '', cpu: r.processor || '', cpu_gen: r.processor_gen || '',
-            ram_type: r.ram_type || '', ram_cap: r.ram_capacity || '',
-            storage_type: r.storage_type || '', storage_cap: r.storage_capacity || '', monitor: r.monitor || ''
-          }
+          funding_source: r.funding_source ? String(r.funding_source).trim() : null,
+          current_status: r.current_status ? String(r.current_status).trim() : 'Working',
+          specs
         });
       }
+
       tbody.innerHTML += `<tr>
-        <td class="p-2">${r.category || '-'}</td><td class="p-2">${r.inventory_no || '-'}</td>
+        <td class="p-2">${cat || '-'}</td><td class="p-2">${inv || '-'}</td>
         <td class="p-2">${r.serial_no || '-'}</td><td class="p-2">${r.brand_model || '-'}</td>
         <td class="p-2">${r.mb_chipset || ''} / ${r.processor || ''} / ${r.ram_capacity || ''}</td>
-        <td class="p-2 ${isValid ? 'text-green-600' : 'text-red-600'} font-semibold">${isValid ? 'OK' : 'Missing Fields'}</td>
+        <td class="p-2 ${isValid ? 'text-green-600' : 'text-red-600'} font-semibold">${isValid ? 'OK' : 'Invalid Category/Inv'}</td>
       </tr>`;
     });
 
@@ -1056,15 +1454,18 @@ function handleBulkFile(e) {
 
 async function confirmBulkUpload() {
   if (!parsedBulkRows.length) return alert('ඇතුළත් කිරීමට නිවැරදි දත්ත නොමැත.');
-  const { error } = await supabaseClient.from('assets').insert(parsedBulkRows);
+  const { data, error } = await supabaseClient.from('assets').insert(parsedBulkRows).select('*, schools(school_name, census_no)');
   if (error) return alert('Bulk Upload දෝෂය: ' + error.message);
-  alert(`උපකරණ ${parsedBulkRows.length}ක් සාර්ථකව ඇතුළත් කරන ලදී!`);
+
+  lastBulkUploadedAssets = data || [];
   document.getElementById('bulk-preview-container').classList.add('hidden');
   document.getElementById('bulk-file').value = '';
+  document.getElementById('bulk-success-text').textContent = `✅ උපකරණ ${lastBulkUploadedAssets.length}ක් සාර්ථකව Database එකට ඇතුළත් කරන ලදී!`;
+  document.getElementById('bulk-success-qr-banner').classList.remove('hidden');
   await loadAssets();
 }
 
-// 11. DIGITAL SIGNATURE PAD & PROFILE UPDATE
+// 13. DIGITAL SIGNATURE PAD & PROFILE UPDATE
 let sigCanvas, sigCtx, drawing = false;
 function initSignaturePad() {
   sigCanvas = document.getElementById('sig-canvas');
